@@ -1,0 +1,299 @@
+/*
+ * =============================================================================
+ *  NOTIFICATION SYSTEM — Production CSS
+ *  Animations, Dark Mode, Mobile Responsive
+ * =============================================================================
+ *
+ *  Import in your layout:
+ *    import "@/styles/notification_styles.css";
+ *
+ * =============================================================================
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Bell Button
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.notification-bell-btn {
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.notification-bell-btn:hover {
+  transform: scale(1.05);
+}
+.notification-bell-btn:active {
+  transform: scale(0.97);
+}
+
+/* Bell ring animation when there are unread notifications */
+@keyframes bell-ring {
+  0%   { transform: rotate(0deg); }
+  10%  { transform: rotate(14deg); }
+  20%  { transform: rotate(-12deg); }
+  30%  { transform: rotate(10deg); }
+  40%  { transform: rotate(-8deg); }
+  50%  { transform: rotate(4deg); }
+  60%  { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+.notification-bell-ring {
+  animation: bell-ring 1.2s ease-in-out;
+  animation-delay: 0.5s;
+  transform-origin: top center;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Badge (unread count)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes badge-pop {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.notification-badge {
+  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dropdown
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes dropdown-enter {
+  0%   { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.notification-dropdown {
+  animation: dropdown-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Scrollbar styling inside dropdown */
+.notification-dropdown ::-webkit-scrollbar {
+  width: 5px;
+}
+.notification-dropdown ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.notification-dropdown ::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 10px;
+}
+.notification-dropdown ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.35);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Notification items
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes item-slide-in {
+  0%   { opacity: 0; transform: translateX(-8px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.notification-item {
+  animation: item-slide-in 0.2s ease forwards;
+}
+.notification-item:nth-child(1) { animation-delay: 0.02s; }
+.notification-item:nth-child(2) { animation-delay: 0.04s; }
+.notification-item:nth-child(3) { animation-delay: 0.06s; }
+.notification-item:nth-child(4) { animation-delay: 0.08s; }
+.notification-item:nth-child(5) { animation-delay: 0.10s; }
+.notification-item:nth-child(6) { animation-delay: 0.12s; }
+.notification-item:nth-child(7) { animation-delay: 0.14s; }
+.notification-item:nth-child(8) { animation-delay: 0.16s; }
+.notification-item:nth-child(9) { animation-delay: 0.18s; }
+.notification-item:nth-child(10) { animation-delay: 0.20s; }
+
+/* Hover effect */
+.notification-item {
+  position: relative;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.notification-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: transparent;
+  transition: background 0.15s ease;
+  border-radius: 0 3px 3px 0;
+}
+.notification-item:hover::before {
+  background: hsl(var(--primary) / 0.5);
+}
+
+/* Unread indicator glow */
+.notification-item[class*="bg-"] {
+  border-left: 3px solid hsl(160 84% 39% / 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Unread dot pulse
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(0.85); }
+}
+.notification-item span[class*="bg-[#10B981]"] {
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Toast notification pop-in (for real-time toasts)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes toast-enter {
+  0%   { opacity: 0; transform: translateY(16px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.notification-toast-enter {
+  animation: toast-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Preferences page — switch transitions
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[role="switch"] {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+[role="switch"][data-state="checked"] {
+  box-shadow: 0 0 0 2px hsl(160 84% 39% / 0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Saving indicator (floating)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes saving-slide {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.fixed.bottom-6 {
+  animation: saving-slide 0.25s ease forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Priority indicators
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes priority-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+.notification-item span[class*="bg-red-500"] {
+  animation: priority-blink 1.5s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Skeleton loading
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes notification-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.notification-skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--muted-foreground) / 0.08) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: notification-shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Empty state
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.notification-dropdown .opacity-40,
+.text-center .opacity-50 {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dark Mode — all colors use CSS variables from shadcn/Tailwind
+   so they automatically adapt. These are additional dark-only tweaks.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dark .notification-dropdown {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.dark .notification-item:hover::before {
+  background: hsl(160 84% 39% / 0.6);
+}
+
+.dark .notification-item[class*="bg-"] {
+  border-left-color: hsl(160 84% 39% / 0.6);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mobile Responsive
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .notification-dropdown {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    max-height: 70vh;
+    border-radius: 16px 16px 0 0;
+    animation-name: dropdown-enter-mobile;
+  }
+
+  @keyframes dropdown-enter-mobile {
+    0%   { opacity: 0; transform: translateY(100%); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@media (max-width: 480px) {
+  .notification-dropdown {
+    max-height: 80vh;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RTL Support (for Arabic)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[dir="rtl"] .notification-dropdown {
+  left: 0;
+  right: auto;
+}
+
+[dir="rtl"] .notification-item::before {
+  left: auto;
+  right: 0;
+  border-radius: 3px 0 0 3px;
+}
+
+[dir="rtl"] .notification-item[class*="bg-"] {
+  border-left: none;
+  border-right: 3px solid hsl(160 84% 39% / 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Print — hide notifications
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  .notification-bell-btn,
+  .notification-dropdown {
+    display: none !important;
+  }
+}
