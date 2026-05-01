@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+.env
+uploads/*
+logs/*
+tmp_pdf_ocr/*
+.git
+*.md

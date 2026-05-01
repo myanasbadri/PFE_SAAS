@@ -1,0 +1,38 @@
+flask
+flask-cors
+pymongo
+gunicorn
+bcrypt
+pyjwt
+python-dotenv
+
+# PDF extraction
+pdfplumber
+pdf2image
+
+# Image OCR
+pytesseract
+Pillow
+
+# Background tasks
+celery
+redis
+
+# LLM - primary (local)
+# Ollama runs as a separate process, no pip package needed
+
+# LLM - fallback (free API)
+groq
+
+# HTTP calls (Ollama API)
+requests
+
+# Date parsing (normalize any date format → YYYY-MM-DD)
+python-dateutil
+
+# Export (Excel generation)
+openpyxl
+
+# Tunisia 2026 E-Invoicing Compliance
+lxml                # XML parsing (TTN invoice format)
+cryptography        # Digital signature / certificate validation
