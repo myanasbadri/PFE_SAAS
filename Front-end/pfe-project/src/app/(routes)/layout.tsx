@@ -21,6 +21,7 @@ import {
   Monitor,
   Settings,
   UsersRound,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,7 @@ const navigation = [
   { key: "aiExtraction", href: "/extraction", icon: Sparkles },
   { key: "aiAdvisor", href: "/advisor", icon: MessageSquare },
   { key: "notifications", href: "/notifications", icon: Bell },
+  { key: "withholdingTax", href: "/withholding", icon: Receipt },
   { key: "auditTrail", href: "/activity", icon: ClipboardList },
   { key: "team", href: "/team", icon: UsersRound },
   { key: "settings", href: "/settings", icon: Settings },
@@ -234,6 +236,30 @@ export default function ProtectedLayout({
                     <span>{lang.label}</span>
                   </DropdownMenuItem>
                 ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* User Menu with Logout */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2 h-9 px-3 text-sm">
+                  <Users className="h-4 w-4" />
+                  <span className="hidden sm:inline font-medium truncate max-w-[100px]">{user?.name || user?.email}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <div className="px-3 py-2">
+                  <p className="text-sm font-medium truncate">{user?.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {t("logout")}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 

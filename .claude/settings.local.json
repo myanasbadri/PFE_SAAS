@@ -9,7 +9,19 @@
       "Bash(python -c \"import py_compile; py_compile.compile\\('app.py', doraise=True\\); print\\('app.py compiles OK'\\)\")",
       "Bash(node -e \"const l = require\\('lucide-react'\\); console.log\\('ShieldCheck:', !!l.ShieldCheck\\); console.log\\('ShieldAlert:', !!l.ShieldAlert\\); console.log\\('ShieldQuestion:', !!l.ShieldQuestion\\);\")",
       "Bash(python -c ':*)",
-      "Bash(python -c \"from app import app; print\\('app OK'\\)\")"
+      "Bash(python -c \"from app import app; print\\('app OK'\\)\")",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 16232\")",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell Get-Process -Id 16232 | Select-Object ProcessName, Id:*)",
+      "Bash(powershell \"Stop-Process -Id 16232 -Force\")",
+      "Bash(powershell:*)",
+      "Bash(ngrok config:*)",
+      "Bash(npx tsc:*)",
+      "Bash(where pandoc:*)",
+      "Bash(winget install:*)",
+      "Bash(tasklist //FI \"PID eq 10692\")",
+      "Bash(tasklist /FI \"PID eq 10692\")"
     ]
   }
 }

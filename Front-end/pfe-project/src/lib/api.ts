@@ -102,15 +102,23 @@ export async function login(email: string, password: string) {
   });
 }
 
-export async function register(
-  name: string,
-  email: string,
-  password: string,
-  role: "admin" | "client"
-) {
+export interface RegisterData {
+  name: string;
+  email: string;
+  password: string;
+  role: "admin" | "client";
+  activity_type?: string;
+  person_type?: string;
+  company_name?: string;
+  tax_id?: string;
+  phone?: string;
+  address?: string;
+}
+
+export async function register(data: RegisterData) {
   return request<AuthResponse>("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify({ name, email, password, role }),
+    body: JSON.stringify(data),
   });
 }
 
@@ -898,4 +906,290 @@ export async function getComplianceReport(invoiceId: string) {
   return request<{ success: boolean; report: ComplianceReport }>(
     `/api/invoices/${invoiceId}/compliance-report`
   );
+}
+
+// ── TEJ Withholding Tax Certificates ──────────────────��───────────────────
+
+export interface TEJRateInfo {
+  code: string;
+  description: string;
+  rates: Record<string, number>;
+  threshold: number;
+}
+
+export interface TEJValidationError {
+  line?: number;
+  column?: number;
+  message: string;
+  level?: string;
+  domain?: string;
+  type?: string;
+}
+
+export interface TEJValidationReport {
+  valid: boolean;
+  errors: TEJValidationError[];
+  warnings: TEJValidationError[];
+  schema_version?: string;
+}
+
+export interface TEJMetadata {
+  generated_at: string;
+  generated_by: string;
+  schema_version: string;
+  checksum: string;
+  qr_code_data: string;
+  declaration_ref: string;
+}
+
+export interface TEJGenerateResult {
+  success: boolean;
+  xml: string | null;
+  validation: TEJValidationReport;
+  metadata: TEJMetadata | null;
+  errors: (string | TEJValidationError)[];
+}
+
+export interface TEJBatchResult extends TEJGenerateResult {
+  row_errors: { row: number; error: string }[];
+  rows_processed: number;
+  rows_skipped: number;
+}
+
+export interface TEJCalculation {
+  rate: number;
+  withholding_amount: number;
+  net_amount: number;
+  below_threshold: boolean;
+  threshold?: number;
+  code?: string;
+}
+
+export interface TEJAddress {
+  street: string;
+  postal_code: string;
+  city: string;
+  governorate?: string;
+}
+
+export interface TEJOperation {
+  withholding_type: string;
+  date: string;
+  gross_amount: number;
+  rate?: number | null;
+  rate_category: string;
+  currency: string;
+  invoice_ref?: string;
+  description?: string;
+}
+
+export interface TEJBeneficiary {
+  id: string;
+  name: string;
+  type: "PERSONNE_PHYSIQUE" | "PERSONNE_MORALE" | "NON_RESIDENT";
+  address?: TEJAddress;
+  operations: TEJOperation[];
+}
+
+export interface TEJDeclarationData {
+  declaration_type: "MENSUELLE" | "TRIMESTRIELLE" | "ANNUELLE" | "COMPLEMENTAIRE";
+  period: { year: number; month?: number; quarter?: number };
+  filing_date: string;
+  reference: string;
+  declarant: {
+    tax_id: string;
+    name: string;
+    address: TEJAddress;
+    activity?: string;
+  };
+  beneficiaries: TEJBeneficiary[];
+}
+
+export async function tejGetRates() {
+  return request<{ success: boolean; rates: Record<string, TEJRateInfo>; currencies: string[] }>(
+    "/api/tej/rates"
+  );
+}
+
+export async function tejCalculate(withholdingType: string, grossAmount: number, rateCategory: string) {
+  return request<{ success: boolean; calculation: TEJCalculation }>(
+    "/api/tej/calculate",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        withholding_type: withholdingType,
+        gross_amount: grossAmount,
+        rate_category: rateCategory,
+      }),
+    }
+  );
+}
+
+export async function tejGenerate(data: TEJDeclarationData) {
+  return request<TEJGenerateResult>("/api/tej/generate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function tejValidate(xml: string) {
+  return request<{ success: boolean; validation: TEJValidationReport }>(
+    "/api/tej/validate",
+    { method: "POST", body: JSON.stringify({ xml }) }
+  );
+}
+
+export async function tejBatchCSV(file: File, declarantData: Omit<TEJDeclarationData, "beneficiaries">) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("declarant_data", JSON.stringify(declarantData));
+  return request<TEJBatchResult>("/api/tej/batch-csv", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+// ── TEJ Certificate CRUD ────────────────────────────────────────────────
+
+export interface TEJCertificate {
+  _id: string;
+  certificate_id: string;
+  user_id: string;
+  org_id: string | null;
+  status: "draft" | "submitted" | "approved" | "rejected";
+  declaration_type: string;
+  period: { year: number; month?: number; quarter?: number };
+  filing_date: string;
+  reference: string;
+  declarant: TEJDeclarationData["declarant"];
+  beneficiaries: TEJBeneficiary[];
+  xml_content: string;
+  validation: TEJValidationReport;
+  metadata: TEJMetadata | null;
+  totals: {
+    total_gross: number;
+    total_withholding: number;
+    total_net: number;
+    operation_count: number;
+    beneficiary_count: number;
+  };
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+  tej_reference: string | null;
+}
+
+export interface TEJCertificateListResponse {
+  success: boolean;
+  certificates: TEJCertificate[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface TEJDashboardStats {
+  totals: {
+    total_gross: number;
+    total_withholding: number;
+    total_net: number;
+    count: number;
+  };
+  by_status: Record<string, number>;
+  by_type: { type: string; count: number; amount: number }[];
+  timeline: { date: string; count: number }[];
+}
+
+export async function tejListCertificates(params?: {
+  page?: number;
+  per_page?: number;
+  status?: string;
+  search?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.per_page) query.set("per_page", String(params.per_page));
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  const qs = query.toString();
+  return request<TEJCertificateListResponse>(`/api/tej/certificates${qs ? `?${qs}` : ""}`);
+}
+
+export async function tejSaveCertificate(data: TEJDeclarationData) {
+  return request<{ success: boolean; certificate: TEJCertificate }>("/api/tej/certificates", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function tejGetCertificate(certId: string) {
+  return request<{ success: boolean; certificate: TEJCertificate }>(`/api/tej/certificates/${certId}`);
+}
+
+export async function tejUpdateCertificate(certId: string, data: TEJDeclarationData) {
+  return request<{ success: boolean; certificate: TEJCertificate }>(`/api/tej/certificates/${certId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function tejDeleteCertificate(certId: string) {
+  return request<{ success: boolean; message: string }>(`/api/tej/certificates/${certId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function tejSubmitCertificate(certId: string) {
+  return request<{ success: boolean; status: string; tej_reference: string; submitted_at: string }>(
+    `/api/tej/certificates/${certId}/submit`,
+    { method: "POST" }
+  );
+}
+
+export async function tejDownloadCertificatePDF(certId: string) {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (typeof window !== "undefined") {
+    const orgId = localStorage.getItem("currentOrgId");
+    if (orgId) headers["X-Org-Id"] = orgId;
+  }
+  const res = await fetch(`${API_BASE}/api/tej/certificates/${certId}/pdf`, { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new ApiError((errData as Record<string, string>).error || "PDF download failed", res.status, errData);
+  }
+  return res.blob();
+}
+
+export async function tejGetDashboard() {
+  return request<{ success: boolean; stats: TEJDashboardStats; recent: TEJCertificate[] }>("/api/tej/dashboard");
+}
+
+export async function tejExportPDF(declarationData: TEJDeclarationData, xml: string, includeSignature = true) {
+  const token = getToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  if (typeof window !== "undefined") {
+    const orgId = localStorage.getItem("currentOrgId");
+    if (orgId) headers["X-Org-Id"] = orgId;
+  }
+
+  const res = await fetch(`${API_BASE}/api/tej/export-pdf`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      declaration_data: declarationData,
+      xml,
+      include_signature: includeSignature,
+    }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new ApiError((errData as Record<string, string>).error || "PDF export failed", res.status, errData);
+  }
+
+  return res.blob();
 }

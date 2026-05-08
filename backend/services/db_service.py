@@ -275,8 +275,18 @@ def init_db():
         sparse=True,
     )
 
+    # Withholding certificates
+    certs = db["withholding_certificates"]
+    certs.create_index([("certificate_id", ASCENDING)], unique=True, name="idx_cert_id")
+    certs.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)], name="idx_cert_user_created")
+    certs.create_index([("org_id", ASCENDING), ("created_at", DESCENDING)], name="idx_cert_org_created", sparse=True)
+    certs.create_index([("status", ASCENDING)], name="idx_cert_status")
+    certs.create_index([("declarant.tax_id", ASCENDING)], name="idx_cert_declarant_tax", sparse=True)
+    certs.create_index([("created_at", DESCENDING)], name="idx_cert_created")
+
     return users, invoices, activity
 
 
 # ── Initialize on import ─────────────────────────────────────────────────────
 users_collection, invoices_collection, activity_collection = init_db()
+certificates_collection = db["withholding_certificates"]

@@ -6,7 +6,11 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { FileText, Mail, Lock, User, ArrowRight, Check, Globe, Loader2 } from 'lucide-react';
+import {
+  FileText, Mail, Lock, User, ArrowRight, ArrowLeft, Check, Globe, Loader2,
+  ShoppingCart, Briefcase, Factory, GraduationCap, Hammer,
+  UserCircle, Building2, Phone, MapPin, Hash,
+} from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -16,6 +20,23 @@ import { ApiError } from '@/lib/api';
 interface AuthenticationProps {
   onAuthenticated: () => void;
 }
+
+/* ── Activity type options (Step 1) ──────────────────────────── */
+const ACTIVITY_TYPES = [
+  { value: "commercial",          labelKey: "regCommercial",          descKey: "regCommercialDesc",          Icon: ShoppingCart },
+  { value: "service",             labelKey: "regService",             descKey: "regServiceDesc",             Icon: Briefcase },
+  { value: "industrial",          labelKey: "regIndustrial",          descKey: "regIndustrialDesc",          Icon: Factory },
+  { value: "liberal_profession",  labelKey: "regLiberalProfession",   descKey: "regLiberalProfessionDesc",   Icon: GraduationCap },
+  { value: "artisanal",           labelKey: "regArtisanal",           descKey: "regArtisanalDesc",           Icon: Hammer },
+] as const;
+
+/* ── Person type options (Step 2) ────────────────────────────── */
+const PERSON_TYPES = [
+  { value: "physical", labelKey: "regPhysical", descKey: "regPhysicalDesc", Icon: UserCircle },
+  { value: "moral",    labelKey: "regMoral",    descKey: "regMoralDesc",    Icon: Building2 },
+] as const;
+
+const TOTAL_STEPS = 5;
 
 export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
   const { language, setLanguage, t } = useLanguage();
@@ -28,7 +49,14 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
   const [signInEmail, setSignInEmail] = useState('');
   const [signInPassword, setSignInPassword] = useState('');
 
-  // Sign Up State
+  // Sign Up Wizard State
+  const [wizardStep, setWizardStep] = useState(0); // 0-4 = steps 1-5
+  const [activityType, setActivityType] = useState('');
+  const [personType, setPersonType] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [taxId, setTaxId] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [signUpName, setSignUpName] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
@@ -52,8 +80,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
     }
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignUp = async () => {
     setError('');
     if (signUpPassword !== signUpConfirmPassword) {
       setError('Passwords do not match!');
@@ -65,7 +92,18 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
     }
     setIsLoading(true);
     try {
-      await register(signUpName, signUpEmail, signUpPassword, 'client');
+      await register({
+        name: signUpName,
+        email: signUpEmail,
+        password: signUpPassword,
+        role: 'client',
+        activity_type: activityType,
+        person_type: personType,
+        company_name: companyName,
+        tax_id: taxId,
+        phone,
+        address,
+      });
       onAuthenticated();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -78,12 +116,361 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
     }
   };
 
+  const canProceed = (): boolean => {
+    switch (wizardStep) {
+      case 0: return !!activityType;
+      case 1: return !!personType;
+      case 2: return true; // business info is optional
+      case 3: return !!(signUpName && signUpEmail && signUpPassword && signUpConfirmPassword);
+      case 4: return true;
+      default: return false;
+    }
+  };
+
+  const handleNext = () => {
+    setError('');
+    if (wizardStep === 3) {
+      if (signUpPassword !== signUpConfirmPassword) {
+        setError('Passwords do not match!');
+        return;
+      }
+      if (signUpPassword.length < 6) {
+        setError('Password must be at least 6 characters.');
+        return;
+      }
+    }
+    if (wizardStep < TOTAL_STEPS - 1) {
+      setWizardStep(wizardStep + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    setError('');
+    if (wizardStep > 0) {
+      setWizardStep(wizardStep - 1);
+    }
+  };
+
+  const handleCancelWizard = () => {
+    setWizardStep(0);
+    setActivityType('');
+    setPersonType('');
+    setCompanyName('');
+    setTaxId('');
+    setPhone('');
+    setAddress('');
+    setSignUpName('');
+    setSignUpEmail('');
+    setSignUpPassword('');
+    setSignUpConfirmPassword('');
+    setError('');
+    setActiveTab('signin');
+  };
+
+  const stepLabel = t('regStepOf')
+    .replace('{step}', String(wizardStep + 1))
+    .replace('{total}', String(TOTAL_STEPS));
+
+  // Helper to get readable label from value
+  const getActivityLabel = () => {
+    const found = ACTIVITY_TYPES.find(a => a.value === activityType);
+    return found ? t(found.labelKey) : '—';
+  };
+  const getPersonLabel = () => {
+    const found = PERSON_TYPES.find(p => p.value === personType);
+    return found ? t(found.labelKey) : '—';
+  };
+
   const features = [
     { text: 'AI-Powered Invoice Extraction' },
     { text: 'Real-time Financial Analytics' },
     { text: 'LLaMA 2 AI Assistant' },
     { text: 'Multi-language Support' },
   ];
+
+  /* ────────────────── Wizard Steps ────────────────── */
+
+  const renderStep0 = () => (
+    <div className="space-y-4">
+      <div className="text-center mb-2">
+        <h3 className="text-lg font-semibold">{t('regStep1Title')}</h3>
+        <p className="text-sm text-muted-foreground">{t('regStep1Subtitle')}</p>
+      </div>
+      <div className="grid gap-3">
+        {ACTIVITY_TYPES.map(({ value, labelKey, descKey, Icon }) => (
+          <div
+            key={value}
+            onClick={() => setActivityType(value)}
+            className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all
+              ${activityType === value
+                ? 'border-accent bg-accent/5 shadow-sm'
+                : 'border-border hover:border-accent/50 hover:bg-muted/50'
+              }`}
+          >
+            <div className={`h-11 w-11 rounded-lg flex items-center justify-center flex-shrink-0
+              ${activityType === value
+                ? 'bg-accent text-accent-foreground'
+                : 'bg-muted text-muted-foreground'
+              }`}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm">{t(labelKey)}</p>
+              <p className="text-xs text-muted-foreground">{t(descKey)}</p>
+            </div>
+            {activityType === value && (
+              <Check className="h-5 w-5 text-accent flex-shrink-0" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderStep1 = () => (
+    <div className="space-y-4">
+      <div className="text-center mb-2">
+        <h3 className="text-lg font-semibold">{t('regStep2Title')}</h3>
+        <p className="text-sm text-muted-foreground">{t('regStep2Subtitle')}</p>
+      </div>
+      <div className="grid gap-3">
+        {PERSON_TYPES.map(({ value, labelKey, descKey, Icon }) => (
+          <div
+            key={value}
+            onClick={() => setPersonType(value)}
+            className={`flex items-center gap-4 p-5 rounded-xl border-2 cursor-pointer transition-all
+              ${personType === value
+                ? 'border-accent bg-accent/5 shadow-sm'
+                : 'border-border hover:border-accent/50 hover:bg-muted/50'
+              }`}
+          >
+            <div className={`h-12 w-12 rounded-lg flex items-center justify-center flex-shrink-0
+              ${personType === value
+                ? 'bg-accent text-accent-foreground'
+                : 'bg-muted text-muted-foreground'
+              }`}>
+              <Icon className="h-6 w-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold">{t(labelKey)}</p>
+              <p className="text-sm text-muted-foreground">{t(descKey)}</p>
+            </div>
+            {personType === value && (
+              <Check className="h-5 w-5 text-accent flex-shrink-0" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderStep2 = () => (
+    <div className="space-y-4">
+      <div className="text-center mb-2">
+        <h3 className="text-lg font-semibold">{t('regStep3Title')}</h3>
+        <p className="text-sm text-muted-foreground">{t('regStep3Subtitle')}</p>
+      </div>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>{t('regCompanyName')}</Label>
+          <div className="relative">
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder={t('regCompanyName')}
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>{t('regTaxId')}</Label>
+          <div className="relative">
+            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={taxId}
+              onChange={(e) => setTaxId(e.target.value)}
+              placeholder="0000000/X/X/X/000"
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>{t('regPhone')}</Label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+216 XX XXX XXX"
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>{t('regAddress')}</Label>
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder={t('regAddress')}
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStep3 = () => (
+    <div className="space-y-4">
+      <div className="text-center mb-2">
+        <h3 className="text-lg font-semibold">{t('regStep4Title')}</h3>
+        <p className="text-sm text-muted-foreground">{t('regStep4Subtitle')}</p>
+      </div>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Full Name</Label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={signUpName}
+              onChange={(e) => setSignUpName(e.target.value)}
+              placeholder="John Doe"
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Email Address</Label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="email"
+              value={signUpEmail}
+              onChange={(e) => setSignUpEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Password</Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="password"
+              value={signUpPassword}
+              onChange={(e) => setSignUpPassword(e.target.value)}
+              placeholder="••••••••"
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Confirm Password</Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="password"
+              value={signUpConfirmPassword}
+              onChange={(e) => setSignUpConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+              required
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStep4 = () => (
+    <div className="space-y-4">
+      <div className="text-center mb-2">
+        <h3 className="text-lg font-semibold">{t('regStep5Title')}</h3>
+        <p className="text-sm text-muted-foreground">{t('regStep5Subtitle')}</p>
+      </div>
+      <div className="space-y-4">
+        {/* Activity & Person Type */}
+        <div className="rounded-lg border border-border p-4 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">{t('regActivityType')}</span>
+            <span className="text-sm font-medium">{getActivityLabel()}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">{t('regPersonType')}</span>
+            <span className="text-sm font-medium">{getPersonLabel()}</span>
+          </div>
+        </div>
+
+        {/* Business Info */}
+        {(companyName || taxId || phone || address) && (
+          <div className="rounded-lg border border-border p-4 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('regBusinessInfo')}</p>
+            {companyName && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{t('regCompanyName')}</span>
+                <span className="text-sm font-medium">{companyName}</span>
+              </div>
+            )}
+            {taxId && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{t('regTaxId')}</span>
+                <span className="text-sm font-medium font-mono">{taxId}</span>
+              </div>
+            )}
+            {phone && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{t('regPhone')}</span>
+                <span className="text-sm font-medium">{phone}</span>
+              </div>
+            )}
+            {address && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">{t('regAddress')}</span>
+                <span className="text-sm font-medium">{address}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Account Info */}
+        <div className="rounded-lg border border-border p-4 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('regAccountInfo')}</p>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Name</span>
+            <span className="text-sm font-medium">{signUpName}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-muted-foreground">Email</span>
+            <span className="text-sm font-medium">{signUpEmail}</span>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3 py-1">
+          <input
+            type="checkbox"
+            id="terms"
+            className="mt-0.5 h-4 w-4 text-accent focus:ring-accent border-border rounded"
+            required
+          />
+          <label htmlFor="terms" className="text-sm text-muted-foreground leading-tight">
+            I agree to the{' '}
+            <a href="#" className="text-accent hover:underline font-medium">Terms of Service</a>
+            {' '}and{' '}
+            <a href="#" className="text-accent hover:underline font-medium">Privacy Policy</a>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+
+  const wizardSteps = [renderStep0, renderStep1, renderStep2, renderStep3, renderStep4];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary via-primary/95 to-primary/90 flex items-center justify-center p-4">
@@ -105,7 +492,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
           <div className="space-y-4">
             <h2 className="text-2xl font-semibold">Transform Your Financial Workflow</h2>
             <p className="text-white/80 text-lg leading-relaxed">
-              Experience the future of invoice management with AI-powered extraction, 
+              Experience the future of invoice management with AI-powered extraction,
               real-time analytics, and intelligent financial insights.
             </p>
           </div>
@@ -133,18 +520,32 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
           <CardHeader className="space-y-4">
             <div className="flex justify-between items-center">
               <div className="space-y-1">
-                <CardTitle className="text-2xl text-card-foreground">
-                  {activeTab === 'signin' ? 'Welcome Back' : 'Create Account'}
-                </CardTitle>
-                <CardDescription>
-                  {activeTab === 'signin' 
-                    ? 'Sign in to access your dashboard' 
-                    : 'Join SmartInvoice AI today'}
-                </CardDescription>
+                {activeTab === 'signup' && wizardStep > 0 ? (
+                  <>
+                    <CardTitle className="text-xl text-card-foreground flex items-center gap-3">
+                      Create Account
+                      <span className="text-sm font-normal text-muted-foreground">{stepLabel}</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Join SmartInvoice AI today
+                    </CardDescription>
+                  </>
+                ) : (
+                  <>
+                    <CardTitle className="text-2xl text-card-foreground">
+                      {activeTab === 'signin' ? 'Welcome Back' : 'Create Account'}
+                    </CardTitle>
+                    <CardDescription>
+                      {activeTab === 'signin'
+                        ? 'Sign in to access your dashboard'
+                        : 'Join SmartInvoice AI today'}
+                    </CardDescription>
+                  </>
+                )}
               </div>
-              
+
               {/* Language Selector */}
-              <Select value={language} onValueChange={(val) => setLanguage(val as any)}>
+              <Select value={language} onValueChange={(val) => setLanguage(val as 'en' | 'fr' | 'ar')}>
                 <SelectTrigger className="w-32 bg-input-background">
                   <div className="flex items-center gap-2">
                     <Globe className="h-4 w-4" />
@@ -158,11 +559,24 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Step Progress Indicator — only visible during sign-up wizard */}
+            {activeTab === 'signup' && (
+              <div className="flex items-center justify-center gap-1.5 pt-2">
+                {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1.5 rounded-full transition-all duration-300
+                      ${i <= wizardStep ? 'bg-accent w-8' : 'bg-muted w-6'}`}
+                  />
+                ))}
+              </div>
+            )}
           </CardHeader>
 
           <CardContent className="pb-8">
-            <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-8 bg-muted">
+            <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val as 'signin' | 'signup'); setError(''); setWizardStep(0); }} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted">
                 <TabsTrigger value="signin" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                   Sign In
                 </TabsTrigger>
@@ -193,7 +607,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <Label htmlFor="signin-password" className="text-card-foreground">Password</Label>
-                      <button 
+                      <button
                         type="button"
                         className="text-xs text-accent hover:underline font-medium"
                       >
@@ -245,9 +659,9 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <Button 
-                      variant="outline" 
-                      type="button" 
+                    <Button
+                      variant="outline"
+                      type="button"
                       className="border-border h-12 hover:bg-secondary"
                     >
                       <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
@@ -258,9 +672,9 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                       </svg>
                       Google
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      type="button" 
+                    <Button
+                      variant="outline"
+                      type="button"
                       className="border-border h-12 hover:bg-secondary"
                     >
                       <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -272,109 +686,71 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                 </form>
               </TabsContent>
 
-              {/* Sign Up Form */}
+              {/* Sign Up — Multi-step Wizard */}
               <TabsContent value="signup">
-                <form onSubmit={handleSignUp} className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name" className="text-card-foreground">Full Name</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="signup-name"
-                        type="text"
-                        placeholder="John Doe"
-                        value={signUpName}
-                        onChange={(e) => setSignUpName(e.target.value)}
-                        className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
-                        required
-                      />
-                    </div>
-                  </div>
+                <div className="space-y-6">
+                  {/* Render current step */}
+                  {wizardSteps[wizardStep]()}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email" className="text-card-foreground">Email Address</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="signup-email"
-                        type="email"
-                        placeholder="you@example.com"
-                        value={signUpEmail}
-                        onChange={(e) => setSignUpEmail(e.target.value)}
-                        className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password" className="text-card-foreground">Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="signup-password"
-                        type="password"
-                        placeholder="••••••••"
-                        value={signUpPassword}
-                        onChange={(e) => setSignUpPassword(e.target.value)}
-                        className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-confirm-password" className="text-card-foreground">Confirm Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="signup-confirm-password"
-                        type="password"
-                        placeholder="••••••••"
-                        value={signUpConfirmPassword}
-                        onChange={(e) => setSignUpConfirmPassword(e.target.value)}
-                        className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 py-2">
-                    <input 
-                      type="checkbox" 
-                      id="terms" 
-                      className="mt-0.5 h-4 w-4 text-accent focus:ring-accent border-border rounded"
-                      required
-                    />
-                    <label htmlFor="terms" className="text-sm text-muted-foreground leading-tight">
-                      I agree to the{' '}
-                      <a href="#" className="text-accent hover:underline font-medium">Terms of Service</a>
-                      {' '}and{' '}
-                      <a href="#" className="text-accent hover:underline font-medium">Privacy Policy</a>
-                    </label>
-                  </div>
-
+                  {/* Error */}
                   {error && activeTab === 'signup' && (
                     <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                       {error}
                     </div>
                   )}
 
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-12 text-base font-semibold mt-2"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                  {/* Navigation Buttons */}
+                  <div className="flex items-center gap-3 pt-2">
+                    {wizardStep === 0 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCancelWizard}
+                        className="flex-1 h-11"
+                      >
+                        {t('regCancel')}
+                      </Button>
                     ) : (
-                      <>
-                        Create Account
-                        <ArrowRight className="h-4 w-4 ml-2" />
-                      </>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handlePrev}
+                        className="flex-1 h-11 gap-2"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        {t('regPrevious')}
+                      </Button>
                     )}
-                  </Button>
-                </form>
+
+                    {wizardStep < TOTAL_STEPS - 1 ? (
+                      <Button
+                        type="button"
+                        onClick={handleNext}
+                        disabled={!canProceed()}
+                        className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground h-11 gap-2"
+                      >
+                        {t('regNext')}
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        onClick={handleSignUp}
+                        disabled={isLoading}
+                        className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground h-11 gap-2"
+                      >
+                        {isLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            {t('regCreateAccount')}
+                            <ArrowRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
             </Tabs>
           </CardContent>

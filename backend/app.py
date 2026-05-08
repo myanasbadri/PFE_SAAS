@@ -9,7 +9,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 from config import PORT, UPLOAD_FOLDER, ALLOWED_EXTENSIONS, OLLAMA_URL, OLLAMA_MODEL, GROQ_API_KEY, GROQ_MODEL, CORS_ORIGINS
-from services.db_service import users_collection, invoices_collection, activity_collection
+from services.db_service import users_collection, invoices_collection, activity_collection, certificates_collection
 from services.auth_service import (
     hash_password,
     verify_password,
@@ -87,6 +87,14 @@ def register():
     password = data.get("password", "").strip()
     role = data.get("role", "client").strip().lower()
 
+    # Registration wizard fields (optional)
+    activity_type = data.get("activity_type", "").strip()
+    person_type = data.get("person_type", "").strip()
+    company_name = data.get("company_name", "").strip()
+    tax_id = data.get("tax_id", "").strip()
+    phone = data.get("phone", "").strip()
+    address = data.get("address", "").strip()
+
     if not name or not email or not password:
         return jsonify({
             "success": False,
@@ -95,6 +103,13 @@ def register():
 
     if role not in ["admin", "client"]:
         role = "client"
+
+    VALID_ACTIVITY_TYPES = ["commercial", "service", "industrial", "liberal_profession", "artisanal"]
+    VALID_PERSON_TYPES = ["physical", "moral"]
+    if activity_type and activity_type not in VALID_ACTIVITY_TYPES:
+        activity_type = ""
+    if person_type and person_type not in VALID_PERSON_TYPES:
+        person_type = ""
 
     existing_user = users_collection.find_one({"email": email})
     if existing_user:
@@ -113,6 +128,20 @@ def register():
         "is_active": True,
         "created_at": now_iso(),
     }
+
+    # Add wizard fields if provided
+    if activity_type:
+        user_doc["activity_type"] = activity_type
+    if person_type:
+        user_doc["person_type"] = person_type
+    if company_name:
+        user_doc["company_name"] = company_name
+    if tax_id:
+        user_doc["tax_id"] = tax_id
+    if phone:
+        user_doc["phone"] = phone
+    if address:
+        user_doc["address"] = address
 
     result = users_collection.insert_one(user_doc)
     user_id = str(result.inserted_id)
@@ -1886,6 +1915,543 @@ def debug_ocr():
             pass
 
     return jsonify({"success": True, "ocr_debug": result}), 200
+
+
+# ── TEJ Withholding Tax Certificate Routes ─────────────────────────────────
+from services.teij_xml_generator import TEJXMLGenerator, WITHHOLDING_RATES, SUPPORTED_CURRENCIES
+
+_tej_generator = TEJXMLGenerator()
+
+
+def _tej_user_id():
+    return g.user["user_id"]
+
+
+def _tej_org_id():
+    return request.headers.get("X-Org-Id") or g.user.get("org_id")
+
+
+@app.route("/api/tej/rates", methods=["GET"])
+@token_required
+def tej_get_rates():
+    """Return all available withholding types and their rates."""
+    rates = {}
+    for key, info in WITHHOLDING_RATES.items():
+        rates[key] = {
+            "code": info["code"],
+            "description": info["description"],
+            "rates": {k: float(v) for k, v in info["rates"].items()},
+            "threshold": float(info["threshold"]),
+        }
+    return jsonify({
+        "success": True,
+        "rates": rates,
+        "currencies": sorted(SUPPORTED_CURRENCIES),
+    }), 200
+
+
+@app.route("/api/tej/calculate", methods=["POST"])
+@token_required
+def tej_calculate():
+    """Calculate withholding amount for a single operation."""
+    data = request.get_json(silent=True) or {}
+    wh_type = data.get("withholding_type", "")
+    gross = data.get("gross_amount")
+    rate_cat = data.get("rate_category", "")
+
+    if not wh_type or gross is None or not rate_cat:
+        return jsonify({
+            "success": False,
+            "error": "withholding_type, gross_amount, and rate_category are required",
+        }), 400
+
+    try:
+        result = _tej_generator.calculate_withholding(wh_type, float(gross), rate_cat)
+        return jsonify({
+            "success": True,
+            "calculation": {k: float(v) if hasattr(v, '__float__') else v for k, v in result.items()},
+        }), 200
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/tej/generate", methods=["POST"])
+@token_required
+def tej_generate():
+    """Generate a TEJ-compliant withholding tax certificate XML."""
+    data = request.get_json(silent=True) or {}
+
+    if not data:
+        return jsonify({"success": False, "error": "Request body is required"}), 400
+
+    result = _tej_generator.generate_withholding_cert(data)
+
+    activity_collection.insert_one({
+        "user_id": _tej_user_id(),
+        "org_id": _tej_org_id(),
+        "action": "tej_generate",
+        "timestamp": now_iso(),
+        "details": {
+            "reference": data.get("reference", ""),
+            "declaration_type": data.get("declaration_type", ""),
+            "success": result["success"],
+        },
+        "ip_address": request.remote_addr or "",
+    })
+
+    status_code = 200 if result["success"] else 422
+    return jsonify(result), status_code
+
+
+@app.route("/api/tej/validate", methods=["POST"])
+@token_required
+def tej_validate():
+    """Validate an XML string against the TEJ schema."""
+    data = request.get_json(silent=True) or {}
+    xml_string = data.get("xml", "")
+
+    if not xml_string:
+        return jsonify({"success": False, "error": "xml field is required"}), 400
+
+    report = _tej_generator.validate_against_schema(xml_string)
+    return jsonify({"success": True, "validation": report}), 200
+
+
+@app.route("/api/tej/batch-csv", methods=["POST"])
+@token_required
+def tej_batch_csv():
+    """Generate TEJ XML from an uploaded CSV + declarant metadata."""
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "CSV file is required"}), 400
+
+    file = request.files["file"]
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        return jsonify({"success": False, "error": "File must be a .csv"}), 400
+
+    csv_content = file.read().decode("utf-8-sig")
+
+    declarant_json = request.form.get("declarant_data", "{}")
+    try:
+        declarant_data = json.loads(declarant_json)
+    except json.JSONDecodeError:
+        return jsonify({"success": False, "error": "Invalid declarant_data JSON"}), 400
+
+    result = _tej_generator.batch_generate_from_csv(csv_content, declarant_data)
+
+    activity_collection.insert_one({
+        "user_id": _tej_user_id(),
+        "org_id": _tej_org_id(),
+        "action": "tej_batch_generate",
+        "timestamp": now_iso(),
+        "details": {
+            "rows_processed": result.get("rows_processed", 0),
+            "rows_skipped": result.get("rows_skipped", 0),
+            "success": result["success"],
+        },
+        "ip_address": request.remote_addr or "",
+    })
+
+    status_code = 200 if result["success"] else 422
+    return jsonify(result), status_code
+
+
+@app.route("/api/tej/export-pdf", methods=["POST"])
+@token_required
+def tej_export_pdf():
+    """Generate a PDF for a withholding certificate and return it."""
+    data = request.get_json(silent=True) or {}
+    declaration_data = data.get("declaration_data")
+    xml_string = data.get("xml")
+
+    if not declaration_data or not xml_string:
+        return jsonify({
+            "success": False,
+            "error": "declaration_data and xml are required",
+        }), 400
+
+    import uuid as _uuid
+    pdf_filename = f"tej_{_uuid.uuid4().hex[:10]}.pdf"
+    pdf_path = os.path.join("tmp_pdf_ocr", pdf_filename)
+
+    result = _tej_generator.export_to_pdf(
+        declaration_data, xml_string, pdf_path,
+        include_signature=data.get("include_signature", True),
+    )
+
+    if not result["success"]:
+        return jsonify(result), 500
+
+    from flask import send_file
+    try:
+        return send_file(
+            pdf_path,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"certificat_retenue_{declaration_data.get('reference', 'TEJ')}.pdf",
+        )
+    finally:
+        try:
+            os.remove(pdf_path)
+        except Exception:
+            pass
+
+
+# ── TEJ Certificate CRUD (MongoDB persistence) ────────────────────────────
+import uuid as _uuid_mod
+
+
+@app.route("/api/tej/certificates", methods=["GET"])
+@token_required
+def tej_list_certificates():
+    """List withholding certificates with filters and pagination."""
+    org_id = _tej_org_id()
+    query = {}
+    if org_id:
+        query["org_id"] = org_id
+    else:
+        query["user_id"] = _tej_user_id()
+
+    # Filters
+    status = request.args.get("status")
+    if status:
+        query["status"] = status
+
+    search = request.args.get("search", "").strip()
+    if search:
+        query["$or"] = [
+            {"declarant.name": {"$regex": search, "$options": "i"}},
+            {"reference": {"$regex": search, "$options": "i"}},
+            {"certificate_id": {"$regex": search, "$options": "i"}},
+        ]
+
+    # Pagination
+    page = max(int(request.args.get("page", 1)), 1)
+    per_page = min(int(request.args.get("per_page", 20)), 100)
+    skip = (page - 1) * per_page
+
+    total = certificates_collection.count_documents(query)
+    cursor = (
+        certificates_collection.find(query)
+        .sort("created_at", -1)
+        .skip(skip)
+        .limit(per_page)
+    )
+
+    certs = []
+    for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        certs.append(doc)
+
+    return jsonify({
+        "success": True,
+        "certificates": certs,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": max(1, -(-total // per_page)),
+    }), 200
+
+
+@app.route("/api/tej/certificates", methods=["POST"])
+@token_required
+def tej_save_certificate():
+    """Generate and persist a withholding certificate to MongoDB."""
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({"success": False, "error": "Request body is required"}), 400
+
+    # Generate XML
+    gen_result = _tej_generator.generate_withholding_cert(data)
+    if not gen_result["success"]:
+        return jsonify(gen_result), 422
+
+    cert_id = f"CERT-{_uuid_mod.uuid4().hex[:12].upper()}"
+    now = now_iso()
+
+    doc = {
+        "certificate_id": cert_id,
+        "user_id": _tej_user_id(),
+        "org_id": _tej_org_id(),
+        "status": "draft",
+        "declaration_type": data.get("declaration_type", ""),
+        "period": data.get("period", {}),
+        "filing_date": data.get("filing_date", ""),
+        "reference": data.get("reference", cert_id),
+        "declarant": data.get("declarant", {}),
+        "beneficiaries": data.get("beneficiaries", []),
+        "xml_content": gen_result["xml"],
+        "validation": gen_result["validation"],
+        "metadata": gen_result["metadata"],
+        "totals": _extract_totals(data.get("beneficiaries", [])),
+        "created_at": now,
+        "updated_at": now,
+        "submitted_at": None,
+        "tej_reference": None,
+    }
+
+    certificates_collection.insert_one(doc)
+
+    activity_collection.insert_one({
+        "user_id": _tej_user_id(),
+        "org_id": _tej_org_id(),
+        "action": "tej_generate",
+        "timestamp": now,
+        "details": {"certificate_id": cert_id, "reference": doc["reference"]},
+        "ip_address": request.remote_addr or "",
+    })
+
+    doc["_id"] = str(doc["_id"])
+    return jsonify({"success": True, "certificate": doc}), 201
+
+
+@app.route("/api/tej/certificates/<cert_id>", methods=["GET"])
+@token_required
+def tej_get_certificate(cert_id):
+    """Get a single certificate by ID."""
+    doc = certificates_collection.find_one({"certificate_id": cert_id})
+    if not doc:
+        return jsonify({"success": False, "error": "Certificate not found"}), 404
+    doc["_id"] = str(doc["_id"])
+    return jsonify({"success": True, "certificate": doc}), 200
+
+
+@app.route("/api/tej/certificates/<cert_id>", methods=["PUT"])
+@token_required
+def tej_update_certificate(cert_id):
+    """Update a draft certificate. Only drafts can be edited."""
+    doc = certificates_collection.find_one({"certificate_id": cert_id})
+    if not doc:
+        return jsonify({"success": False, "error": "Certificate not found"}), 404
+    if doc["status"] != "draft":
+        return jsonify({"success": False, "error": "Only draft certificates can be edited"}), 400
+
+    data = request.get_json(silent=True) or {}
+
+    # Re-generate XML with updated data
+    gen_result = _tej_generator.generate_withholding_cert(data)
+    if not gen_result["success"]:
+        return jsonify(gen_result), 422
+
+    now = now_iso()
+    update_fields = {
+        "declaration_type": data.get("declaration_type", doc["declaration_type"]),
+        "period": data.get("period", doc["period"]),
+        "filing_date": data.get("filing_date", doc["filing_date"]),
+        "reference": data.get("reference", doc["reference"]),
+        "declarant": data.get("declarant", doc["declarant"]),
+        "beneficiaries": data.get("beneficiaries", doc["beneficiaries"]),
+        "xml_content": gen_result["xml"],
+        "validation": gen_result["validation"],
+        "metadata": gen_result["metadata"],
+        "totals": _extract_totals(data.get("beneficiaries", doc["beneficiaries"])),
+        "updated_at": now,
+    }
+
+    certificates_collection.update_one(
+        {"certificate_id": cert_id},
+        {"$set": update_fields},
+    )
+
+    updated = certificates_collection.find_one({"certificate_id": cert_id})
+    updated["_id"] = str(updated["_id"])
+    return jsonify({"success": True, "certificate": updated}), 200
+
+
+@app.route("/api/tej/certificates/<cert_id>", methods=["DELETE"])
+@token_required
+def tej_delete_certificate(cert_id):
+    """Delete a draft certificate."""
+    doc = certificates_collection.find_one({"certificate_id": cert_id})
+    if not doc:
+        return jsonify({"success": False, "error": "Certificate not found"}), 404
+    if doc["status"] != "draft":
+        return jsonify({"success": False, "error": "Only draft certificates can be deleted"}), 400
+
+    certificates_collection.delete_one({"certificate_id": cert_id})
+
+    activity_collection.insert_one({
+        "user_id": _tej_user_id(),
+        "org_id": _tej_org_id(),
+        "action": "tej_generate",
+        "timestamp": now_iso(),
+        "details": {"certificate_id": cert_id, "action": "deleted"},
+        "ip_address": request.remote_addr or "",
+    })
+
+    return jsonify({"success": True, "message": "Certificate deleted"}), 200
+
+
+@app.route("/api/tej/certificates/<cert_id>/submit", methods=["POST"])
+@token_required
+def tej_submit_certificate(cert_id):
+    """Mark certificate as submitted to TEJ platform."""
+    doc = certificates_collection.find_one({"certificate_id": cert_id})
+    if not doc:
+        return jsonify({"success": False, "error": "Certificate not found"}), 404
+    if doc["status"] not in ("draft",):
+        return jsonify({"success": False, "error": "Certificate already submitted"}), 400
+
+    now = now_iso()
+    tej_ref = f"TEJ-{_uuid_mod.uuid4().hex[:16].upper()}"
+
+    certificates_collection.update_one(
+        {"certificate_id": cert_id},
+        {"$set": {
+            "status": "submitted",
+            "submitted_at": now,
+            "tej_reference": tej_ref,
+            "updated_at": now,
+        }},
+    )
+
+    activity_collection.insert_one({
+        "user_id": _tej_user_id(),
+        "org_id": _tej_org_id(),
+        "action": "tej_generate",
+        "timestamp": now,
+        "details": {"certificate_id": cert_id, "action": "submitted", "tej_reference": tej_ref},
+        "ip_address": request.remote_addr or "",
+    })
+
+    return jsonify({
+        "success": True,
+        "status": "submitted",
+        "tej_reference": tej_ref,
+        "submitted_at": now,
+    }), 200
+
+
+@app.route("/api/tej/certificates/<cert_id>/pdf", methods=["GET"])
+@token_required
+def tej_certificate_pdf(cert_id):
+    """Download PDF for a saved certificate."""
+    doc = certificates_collection.find_one({"certificate_id": cert_id})
+    if not doc:
+        return jsonify({"success": False, "error": "Certificate not found"}), 404
+
+    declaration_data = {
+        "declaration_type": doc["declaration_type"],
+        "period": doc["period"],
+        "filing_date": doc["filing_date"],
+        "reference": doc["reference"],
+        "declarant": doc["declarant"],
+        "beneficiaries": doc["beneficiaries"],
+    }
+
+    pdf_filename = f"tej_{_uuid_mod.uuid4().hex[:10]}.pdf"
+    pdf_path = os.path.join("tmp_pdf_ocr", pdf_filename)
+
+    result = _tej_generator.export_to_pdf(declaration_data, doc["xml_content"], pdf_path)
+    if not result["success"]:
+        return jsonify(result), 500
+
+    from flask import send_file
+    try:
+        return send_file(
+            pdf_path,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"certificat_{doc['reference']}.pdf",
+        )
+    finally:
+        try:
+            os.remove(pdf_path)
+        except Exception:
+            pass
+
+
+@app.route("/api/tej/dashboard", methods=["GET"])
+@token_required
+def tej_dashboard():
+    """Return aggregate stats for withholding dashboard."""
+    org_id = _tej_org_id()
+    match = {}
+    if org_id:
+        match["org_id"] = org_id
+    else:
+        match["user_id"] = _tej_user_id()
+
+    pipeline_status = [
+        {"$match": match},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    status_counts = {r["_id"]: r["count"] for r in certificates_collection.aggregate(pipeline_status)}
+
+    pipeline_totals = [
+        {"$match": match},
+        {"$group": {
+            "_id": None,
+            "total_gross": {"$sum": "$totals.total_gross"},
+            "total_withholding": {"$sum": "$totals.total_withholding"},
+            "total_net": {"$sum": "$totals.total_net"},
+            "count": {"$sum": 1},
+        }},
+    ]
+    totals_result = list(certificates_collection.aggregate(pipeline_totals))
+    totals = totals_result[0] if totals_result else {"total_gross": 0, "total_withholding": 0, "total_net": 0, "count": 0}
+    totals.pop("_id", None)
+
+    pipeline_by_type = [
+        {"$match": match},
+        {"$unwind": "$beneficiaries"},
+        {"$unwind": "$beneficiaries.operations"},
+        {"$group": {
+            "_id": "$beneficiaries.operations.withholding_type",
+            "count": {"$sum": 1},
+            "amount": {"$sum": "$beneficiaries.operations.gross_amount"},
+        }},
+        {"$sort": {"count": -1}},
+    ]
+    by_type = [{"type": r["_id"], "count": r["count"], "amount": r.get("amount", 0)}
+               for r in certificates_collection.aggregate(pipeline_by_type)]
+
+    pipeline_timeline = [
+        {"$match": match},
+        {"$addFields": {"date_str": {"$substr": ["$created_at", 0, 10]}}},
+        {"$group": {"_id": "$date_str", "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+        {"$limit": 30},
+    ]
+    timeline = [{"date": r["_id"], "count": r["count"]}
+                for r in certificates_collection.aggregate(pipeline_timeline)]
+
+    recent = []
+    for doc in certificates_collection.find(match).sort("created_at", -1).limit(5):
+        doc["_id"] = str(doc["_id"])
+        recent.append(doc)
+
+    return jsonify({
+        "success": True,
+        "stats": {
+            "totals": totals,
+            "by_status": status_counts,
+            "by_type": by_type,
+            "timeline": timeline,
+        },
+        "recent": recent,
+    }), 200
+
+
+def _extract_totals(beneficiaries: list) -> dict:
+    """Sum up totals across all beneficiary operations for storage."""
+    total_gross = 0.0
+    total_wh = 0.0
+    count = 0
+    for ben in beneficiaries:
+        for op in ben.get("operations", []):
+            gross = float(op.get("gross_amount", 0))
+            rate = float(op.get("rate", 0) or 0)
+            wh = gross * rate
+            total_gross += gross
+            total_wh += wh
+            count += 1
+    return {
+        "total_gross": round(total_gross, 3),
+        "total_withholding": round(total_wh, 3),
+        "total_net": round(total_gross - total_wh, 3),
+        "operation_count": count,
+        "beneficiary_count": len(beneficiaries),
+    }
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ python-dotenv
 # PDF extraction
 pdfplumber
 pdf2image
+PyMuPDF
 
 # Image OCR
 pytesseract
@@ -36,3 +37,8 @@ openpyxl
 # Tunisia 2026 E-Invoicing Compliance
 lxml                # XML parsing (TTN invoice format)
 cryptography        # Digital signature / certificate validation
+
+# TEJ XML Generator (withholding tax certificates)
+reportlab           # PDF generation for certificates
+qrcode              # QR code for certificate verification
+Pillow              # Image support (already listed above, also used by qrcode)

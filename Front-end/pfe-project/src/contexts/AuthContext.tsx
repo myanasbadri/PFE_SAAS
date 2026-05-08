@@ -7,6 +7,7 @@ import {
   getMe,
   type AuthUser,
   type Org,
+  type RegisterData,
   ApiError,
 } from "@/lib/api";
 
@@ -19,7 +20,7 @@ interface AuthContextType {
   setOrgs: (orgs: Org[]) => void;
   setCurrentOrgId: (orgId: string) => void;
   login: (email: string, password: string) => Promise<{ orgs?: Org[]; current_org_id?: string }>;
-  register: (name: string, email: string, password: string, role: "admin" | "client") => Promise<{ orgs?: Org[]; current_org_id?: string }>;
+  register: (data: RegisterData) => Promise<{ orgs?: Org[]; current_org_id?: string }>;
   logout: () => void;
   updateToken: (token: string) => void;
 }
@@ -106,8 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (name: string, email: string, password: string, role: "admin" | "client") => {
-      const res = await apiRegister(name, email, password, role);
+    async (data: RegisterData) => {
+      const res = await apiRegister(data);
       localStorage.setItem("token", res.token);
       localStorage.setItem("user", JSON.stringify(res.user));
       setToken(res.token);
