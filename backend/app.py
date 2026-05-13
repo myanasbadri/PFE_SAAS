@@ -2670,6 +2670,78 @@ def get_invoice_share_info(invoice_id):
         return jsonify({"success": False, "error": str(e)}), 400
 
 
+@app.route("/api/invoices/import/<share_code>", methods=["POST"])
+@token_required
+@org_required
+def import_invoice_by_code(share_code):
+    """
+    Import another user's invoice into the current user's org by share code.
+    Creates a copy so it appears on the importer's dashboard.
+    """
+    try:
+        source = invoices_collection.find_one({"share_code": share_code})
+        if not source:
+            return jsonify({"success": False, "error": "Invoice not found"}), 404
+
+        # Don't allow re-importing your own invoice
+        if source.get("org_id") == g.org["org_id"]:
+            return jsonify({"success": False, "error": "This invoice already belongs to your organization"}), 409
+
+        # Check if this share code was already imported by this org
+        existing = invoices_collection.find_one({
+            "org_id": g.org["org_id"],
+            "imported_from": share_code,
+        })
+        if existing:
+            return jsonify({
+                "success": False,
+                "error": "This invoice has already been imported",
+                "invoice_id": str(existing["_id"]),
+            }), 409
+
+        source_data = source.get("data", {})
+
+        new_doc = {
+            "user_id": g.user["user_id"],
+            "org_id": g.org["org_id"],
+            "filename": "imported",
+            "original_filename": f"imported_{source_data.get('invoice_no', 'invoice')}",
+            "status": "completed",
+            "share_code": generate_share_code(),
+            "imported_from": share_code,
+            "imported_at": now_iso(),
+            "source_org_id": source.get("org_id", ""),
+            "data": source_data,
+            "tags": ["imported"],
+            "created_at": now_iso(),
+        }
+
+        result = invoices_collection.insert_one(new_doc)
+        increment_usage(db, g.org["org_id"], "invoices")
+
+        activity_collection.insert_one({
+            "user_id": g.user["user_id"],
+            "org_id": g.org["org_id"],
+            "action": "import",
+            "timestamp": now_iso(),
+            "details": {
+                "invoice_id": str(result.inserted_id),
+                "share_code": share_code,
+                "method": "qr_scan",
+            },
+            "ip_address": request.remote_addr or "",
+        })
+
+        return jsonify({
+            "success": True,
+            "message": "Invoice imported successfully",
+            "invoice_id": str(result.inserted_id),
+        }), 201
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "true").lower() == "true"
     app.run(host="0.0.0.0", port=PORT, debug=debug)

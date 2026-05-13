@@ -367,6 +367,21 @@ const translations: Record<Language, Record<string, string>> = {
     invoiceLanguage: 'Invoice Language',
     autoDetect: 'Auto Detect',
 
+    // ── Scan & Import ─────────────────────────────────────────
+    scanImport: 'Scan & Import',
+    scanImportDesc: 'Scan a QR code from a printed invoice to import it into your dashboard',
+    scanQrCode: 'Scan QR Code',
+    scanningQr: 'Point camera at the QR code on the invoice',
+    importInvoice: 'Import Invoice',
+    importingInvoice: 'Importing invoice...',
+    invoiceImported: 'Invoice imported successfully!',
+    alreadyImported: 'This invoice has already been imported',
+    ownInvoice: 'This invoice already belongs to your organization',
+    invoicePreview: 'Invoice Preview',
+    addToDashboard: 'Add to My Dashboard',
+    orEnterCode: 'Or enter share code manually',
+    scanAnother: 'Scan Another',
+
     // ── TEJ Withholding Tax ────────────────────────────────────
     withholdingTax: 'Withholding Tax',
     tejTitle: 'Withholding Tax Certificates',
@@ -856,6 +871,21 @@ const translations: Record<Language, Record<string, string>> = {
     invoiceLanguage: 'Langue de la facture',
     autoDetect: 'Détection auto',
 
+    // ── Scan & Import ─────────────────────────────────────────
+    scanImport: 'Scanner & Importer',
+    scanImportDesc: 'Scannez un code QR d\'une facture imprimée pour l\'importer dans votre tableau de bord',
+    scanQrCode: 'Scanner le code QR',
+    scanningQr: 'Dirigez la caméra vers le code QR de la facture',
+    importInvoice: 'Importer la facture',
+    importingInvoice: 'Importation en cours...',
+    invoiceImported: 'Facture importée avec succès !',
+    alreadyImported: 'Cette facture a déjà été importée',
+    ownInvoice: 'Cette facture appartient déjà à votre organisation',
+    invoicePreview: 'Aperçu de la facture',
+    addToDashboard: 'Ajouter à mon tableau de bord',
+    orEnterCode: 'Ou entrez le code manuellement',
+    scanAnother: 'Scanner une autre',
+
     // ── TEJ Withholding Tax ────────────────────────────────────
     withholdingTax: 'Retenue à la Source',
     tejTitle: 'Certificats de Retenue à la Source',
@@ -1344,6 +1374,21 @@ const translations: Record<Language, Record<string, string>> = {
     // ── Language Selector ──────────────────────────────────────
     invoiceLanguage: 'لغة الفاتورة',
     autoDetect: 'كشف تلقائي',
+
+    // ── Scan & Import ─────────────────────────────────────────
+    scanImport: 'مسح واستيراد',
+    scanImportDesc: 'امسح رمز QR من فاتورة مطبوعة لاستيرادها إلى لوحة التحكم الخاصة بك',
+    scanQrCode: 'مسح رمز QR',
+    scanningQr: 'وجّه الكاميرا نحو رمز QR الموجود على الفاتورة',
+    importInvoice: 'استيراد الفاتورة',
+    importingInvoice: 'جاري استيراد الفاتورة...',
+    invoiceImported: 'تم استيراد الفاتورة بنجاح!',
+    alreadyImported: 'تم استيراد هذه الفاتورة بالفعل',
+    ownInvoice: 'هذه الفاتورة تنتمي بالفعل إلى مؤسستك',
+    invoicePreview: 'معاينة الفاتورة',
+    addToDashboard: 'إضافة إلى لوحة التحكم',
+    orEnterCode: 'أو أدخل الرمز يدوياً',
+    scanAnother: 'مسح فاتورة أخرى',
 
     // ── TEJ Withholding Tax ────────────────────────────────────
     withholdingTax: 'الخصم من المنبع',

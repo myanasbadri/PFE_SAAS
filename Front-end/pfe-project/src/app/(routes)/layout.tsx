@@ -22,6 +22,7 @@ import {
   Settings,
   UsersRound,
   Receipt,
+  ScanLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +50,7 @@ const navigation = [
   { key: "dashboard", href: "/dashboard", icon: LayoutDashboard },
   { key: "invoices", href: "/invoices", icon: FileText },
   { key: "aiExtraction", href: "/extraction", icon: Sparkles },
+  { key: "scanImport", href: "/scan", icon: ScanLine },
   { key: "aiAdvisor", href: "/advisor", icon: MessageSquare },
   { key: "notifications", href: "/notifications", icon: Bell },
   { key: "withholdingTax", href: "/withholding", icon: Receipt },

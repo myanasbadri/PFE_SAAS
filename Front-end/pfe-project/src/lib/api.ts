@@ -953,6 +953,13 @@ export async function lookupInvoiceByCode(shareCode: string) {
   );
 }
 
+export async function importInvoiceByCode(shareCode: string) {
+  return request<{ success: boolean; message: string; invoice_id: string }>(
+    `/api/invoices/import/${encodeURIComponent(shareCode)}`,
+    { method: "POST" }
+  );
+}
+
 // ── TEJ Withholding Tax Certificates ──────────────────��───────────────────
 
 export interface TEJRateInfo {
