@@ -12,12 +12,13 @@ import { Badge } from "./ui/badge";
 import { Progress } from "./ui/progress";
 import { Separator } from "./ui/separator";
 import { useLanguage } from "../contexts/LanguageContext";
+import { QRCodeSVG } from "qrcode.react";
 import {
   validateInvoiceCompliance,
   verifyInvoiceSignature,
   submitToTTN,
   getComplianceReport,
-  getInvoiceQRCodeUrl,
+  getInvoiceShareInfo,
   type ComplianceReport,
   type ComplianceResult,
   type SignatureResult,
@@ -37,7 +38,7 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
   const [validating, setValidating] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [qrShareCode, setQrShareCode] = useState<string | null>(null);
   const [loadingQr, setLoadingQr] = useState(false);
 
   const loadReport = async () => {
@@ -90,8 +91,8 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
   const handleGenerateQR = async () => {
     setLoadingQr(true);
     try {
-      const url = await getInvoiceQRCodeUrl(invoiceId);
-      setQrUrl(url);
+      const info = await getInvoiceShareInfo(invoiceId);
+      setQrShareCode(info.share_code);
     } catch {
       toast.error(t("qrCodeFailed") || "Failed to generate QR code");
     } finally {
@@ -100,11 +101,26 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
   };
 
   const handleDownloadQR = () => {
-    if (!qrUrl) return;
-    const a = document.createElement("a");
-    a.href = qrUrl;
-    a.download = `invoice_qr_${invoiceId}.png`;
-    a.click();
+    if (!qrShareCode) return;
+    const svg = document.getElementById("compliance-qr-svg");
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = new window.Image();
+    img.onload = () => {
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.drawImage(img, 0, 0, 256, 256);
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `invoice_qr_${invoiceId}.png`;
+      a.click();
+    };
+    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
   };
 
   const handleSubmitTTN = async () => {
@@ -416,7 +432,7 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
                   {t("invoiceQRCode") || "Tax QR Code"}
                 </h4>
                 <div className="flex gap-1.5">
-                  {qrUrl && (
+                  {qrShareCode && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -429,21 +445,27 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
                   )}
                   <Button
                     size="sm"
-                    variant={qrUrl ? "outline" : "default"}
+                    variant={qrShareCode ? "outline" : "default"}
                     onClick={handleGenerateQR}
                     disabled={loadingQr}
                     className="gap-1.5 h-7 text-xs"
                   >
                     {loadingQr ? <Loader2 className="h-3 w-3 animate-spin" /> : <QrCode className="h-3 w-3" />}
-                    {qrUrl ? (t("regenerate") || "Regenerate") : (t("generate") || "Generate")}
+                    {qrShareCode ? (t("regenerate") || "Regenerate") : (t("generate") || "Generate")}
                   </Button>
                 </div>
               </div>
-              {qrUrl ? (
+              {qrShareCode ? (
                 <div className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-border">
-                  <img src={qrUrl} alt="Invoice QR Code" className="w-32 h-32" />
+                  <QRCodeSVG
+                    id="compliance-qr-svg"
+                    value={JSON.stringify({ share_code: qrShareCode })}
+                    size={128}
+                    level="M"
+                    includeMargin={false}
+                  />
                   <p className="text-[10px] text-muted-foreground text-center">
-                    {t("qrCodeHint") || "Contains invoice number, VAT IDs, amounts, and verification checksum"}
+                    {qrShareCode}
                   </p>
                 </div>
               ) : (

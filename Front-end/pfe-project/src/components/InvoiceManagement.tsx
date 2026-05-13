@@ -70,6 +70,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
 import jsPDF from "jspdf";
+import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
   DialogContent,
@@ -96,7 +97,6 @@ import {
   getInvoiceHistory,
   exportAllInvoicesExcel,
   exportInvoiceExcel,
-  getInvoiceQRCodeUrl,
   getInvoiceShareInfo,
   lookupInvoiceByCode,
   ApiError,
@@ -243,7 +243,6 @@ export const InvoiceManagement = () => {
   // ── Share / QR Code State ────────────────────────────────────────────
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareCode, setShareCode] = useState("");
-  const [shareQrUrl, setShareQrUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
 
   // ── Lookup State ────────────────────────────────────────────────────
@@ -623,22 +622,22 @@ export const InvoiceManagement = () => {
       doc.line(16, y, 80, y);
     }
 
-    // QR Code (fetch and embed)
-    try {
-      const qrUrl = await getInvoiceQRCodeUrl(invoice._key);
-      const qrRes = await fetch(qrUrl);
-      const qrBlob = await qrRes.blob();
-      const qrBase64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(qrBlob);
-      });
-      const pageH = doc.internal.pageSize.getHeight();
-      doc.addImage(qrBase64, "PNG", pageW - 46, pageH - 52, 30, 30);
-      doc.setTextColor(100, 100, 100);
-      doc.setFontSize(6);
-      doc.text("Scan to verify", pageW - 31, pageH - 20, { align: "center" });
-    } catch { /* skip QR if generation fails */ }
+    // QR Code (generated client-side)
+    const shareCodeVal = raw?.share_code;
+    if (shareCodeVal) {
+      try {
+        const QRCode = (await import("qrcode")).default;
+        const qrDataUrl = await QRCode.toDataURL(
+          JSON.stringify({ share_code: shareCodeVal }),
+          { width: 150, margin: 1, errorCorrectionLevel: "M" }
+        );
+        const pageH = doc.internal.pageSize.getHeight();
+        doc.addImage(qrDataUrl, "PNG", pageW - 46, pageH - 52, 30, 30);
+        doc.setTextColor(100, 100, 100);
+        doc.setFontSize(6);
+        doc.text("Scan to verify", pageW - 31, pageH - 20, { align: "center" });
+      } catch { /* skip QR if generation fails */ }
+    }
 
     const pageH = doc.internal.pageSize.getHeight();
     doc.setFillColor(10, 37, 64);
@@ -651,7 +650,6 @@ export const InvoiceManagement = () => {
     });
 
     // Share code in footer
-    const shareCodeVal = raw?.share_code;
     if (shareCodeVal) {
       doc.setFontSize(7);
       doc.text(`Share Code: ${shareCodeVal}`, 16, pageH - 8);
@@ -826,12 +824,6 @@ export const InvoiceManagement = () => {
       // Show share dialog with QR code
       if (result.share_code) {
         setShareCode(result.share_code);
-        try {
-          const qrUrl = await getInvoiceQRCodeUrl(result.invoice_id);
-          setShareQrUrl(qrUrl);
-        } catch {
-          setShareQrUrl("");
-        }
         setShareDialogOpen(true);
       }
     } catch (err) {
@@ -871,17 +863,13 @@ export const InvoiceManagement = () => {
     setShareLoading(true);
     setShareDialogOpen(true);
     setShareCode("");
-    setShareQrUrl("");
     try {
       const info = await getInvoiceShareInfo(invoice._key);
       setShareCode(info.share_code);
-      const qrUrl = await getInvoiceQRCodeUrl(invoice._key);
-      setShareQrUrl(qrUrl);
     } catch {
       toast.error("Failed to load share info");
-    } finally {
-      setShareLoading(false);
     }
+    setShareLoading(false);
   };
 
   const copyShareCode = () => {
@@ -2707,14 +2695,15 @@ export const InvoiceManagement = () => {
               </div>
             ) : (
               <>
-                {/* QR Code */}
-                {shareQrUrl && (
+                {/* QR Code — generated client-side */}
+                {shareCode && (
                   <div className="flex justify-center">
                     <div className="bg-white p-4 rounded-xl shadow-sm border">
-                      <img
-                        src={shareQrUrl}
-                        alt="Invoice QR Code"
-                        className="w-48 h-48"
+                      <QRCodeSVG
+                        value={JSON.stringify({ share_code: shareCode })}
+                        size={192}
+                        level="M"
+                        includeMargin={false}
                       />
                     </div>
                   </div>
