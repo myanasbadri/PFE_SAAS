@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   ShieldCheck, ShieldAlert, ShieldQuestion, AlertTriangle,
   CheckCircle2, XCircle, Info, FileText, Send, Loader2, RefreshCw,
+  QrCode, Download,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -16,6 +17,7 @@ import {
   verifyInvoiceSignature,
   submitToTTN,
   getComplianceReport,
+  getInvoiceQRCodeUrl,
   type ComplianceReport,
   type ComplianceResult,
   type SignatureResult,
@@ -35,6 +37,8 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
   const [validating, setValidating] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [loadingQr, setLoadingQr] = useState(false);
 
   const loadReport = async () => {
     setLoading(true);
@@ -81,6 +85,26 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
     } finally {
       setVerifying(false);
     }
+  };
+
+  const handleGenerateQR = async () => {
+    setLoadingQr(true);
+    try {
+      const url = await getInvoiceQRCodeUrl(invoiceId);
+      setQrUrl(url);
+    } catch {
+      toast.error(t("qrCodeFailed") || "Failed to generate QR code");
+    } finally {
+      setLoadingQr(false);
+    }
+  };
+
+  const handleDownloadQR = () => {
+    if (!qrUrl) return;
+    const a = document.createElement("a");
+    a.href = qrUrl;
+    a.download = `invoice_qr_${invoiceId}.png`;
+    a.click();
   };
 
   const handleSubmitTTN = async () => {
@@ -378,6 +402,53 @@ export default function CompliancePanel({ invoiceId, sourceFormat, onUpdate }: C
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {t("notSubmitted") || "Not submitted yet"}
+                </p>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Invoice QR Code */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium flex items-center gap-1.5">
+                  <QrCode className="h-4 w-4 text-blue-500" />
+                  {t("invoiceQRCode") || "Tax QR Code"}
+                </h4>
+                <div className="flex gap-1.5">
+                  {qrUrl && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleDownloadQR}
+                      className="gap-1.5 h-7 text-xs"
+                    >
+                      <Download className="h-3 w-3" />
+                      {t("download") || "Download"}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant={qrUrl ? "outline" : "default"}
+                    onClick={handleGenerateQR}
+                    disabled={loadingQr}
+                    className="gap-1.5 h-7 text-xs"
+                  >
+                    {loadingQr ? <Loader2 className="h-3 w-3 animate-spin" /> : <QrCode className="h-3 w-3" />}
+                    {qrUrl ? (t("regenerate") || "Regenerate") : (t("generate") || "Generate")}
+                  </Button>
+                </div>
+              </div>
+              {qrUrl ? (
+                <div className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-border">
+                  <img src={qrUrl} alt="Invoice QR Code" className="w-32 h-32" />
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    {t("qrCodeHint") || "Contains invoice number, VAT IDs, amounts, and verification checksum"}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {t("qrCodeNotGenerated") || "Generate a QR code with tax-relevant invoice data"}
                 </p>
               )}
             </div>

@@ -247,6 +247,22 @@ _TAG_MAP = {
     # Notes
     "note": "notes", "notes": "notes", "remarque": "notes",
     "description": "notes",
+    # Arabic field mappings
+    "اسمالبائع": "vendor_name", "المورد": "vendor_name", "البائع": "vendor_name",
+    "رقمالفاتورة": "invoice_no", "رقمفاتورة": "invoice_no",
+    "تاريخالفاتورة": "date", "تاريخالاصدار": "date", "التاريخ": "date",
+    "تاريخالاستحقاق": "due_date",
+    "المجموعالفرعي": "subtotal", "المبلغقبلالضريبة": "subtotal",
+    "الضريبة": "tax", "ضريبةالقيمةالمضافة": "tax",
+    "المجموعالكلي": "grand_total", "المبلغالاجمالي": "grand_total",
+    "خصم": "discount",
+    "العملة": "currency",
+    "العميل": "buyer_name", "المشتري": "buyer_name", "اسمالعميل": "buyer_name",
+    "عنوانالعميل": "buyer_address",
+    "الرقمالجبائي": "seller_vat_id", "المعرفالجبائي": "seller_vat_id",
+    "رقمالتعريفالضريبي": "seller_vat_id",
+    "طريقةالدفع": "payment_method",
+    "ملاحظات": "notes",
 }
 
 # Line item tag mappings
@@ -263,6 +279,14 @@ _ITEM_TAG_MAP = {
     "taxrate": "tax_rate", "tauxtva": "tax_rate",
     "percent": "tax_rate", "vatrate": "tax_rate",
     "taxexempt": "tax_exempt", "exonere": "tax_exempt",
+    # Arabic line item mappings
+    "وصف": "description", "اسمالصنف": "description", "البيان": "description",
+    "تسمية": "description", "الخدمة": "description",
+    "كمية": "quantity", "الكمية": "quantity",
+    "سعرالوحدة": "unit_price", "السعر": "unit_price", "ثمنالوحدة": "unit_price",
+    "المجموع": "total", "المبلغ": "total", "اجمالي": "total",
+    "نسبةالضريبة": "tax_rate", "معدلالضريبة": "tax_rate",
+    "معفى": "tax_exempt",
 }
 
 
@@ -296,7 +320,8 @@ def _parse_generic_xml(root) -> dict:
         text = (el.text or "").strip() if el.text else None
 
         # Detect line item containers
-        if tag in ("invoiceline", "line", "item", "lineitem", "ligne", "article", "lignedefacture"):
+        if tag in ("invoiceline", "line", "item", "lineitem", "ligne", "article", "lignedefacture",
+                       "سطرالفاتورة", "بند", "صنف", "عنصر"):
             item = {"description": None, "quantity": None, "unit_price": None, "total": None}
             for child in el:
                 _walk(child, is_line_item_context=True, current_item=item)

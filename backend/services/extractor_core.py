@@ -80,11 +80,12 @@ def _build_default_empty(text: str, warning: str) -> dict:
     }
 
 
-_PROMPT_TEMPLATE = """You are an invoice data extraction engine.
+_PROMPT_TEMPLATE = """You are a multilingual invoice data extraction engine.
+You handle invoices in English, French, and Arabic (including right-to-left text).
 Extract all invoice fields from the raw text and return ONLY a valid JSON object.
 No markdown, no explanation, no text outside the JSON.
 
---- EXAMPLE ---
+--- EXAMPLE (English) ---
 Input text:
   INVOICE #INV-001  Date: January 5, 2024
   From: Acme Ltd
@@ -109,16 +110,9 @@ Expected output:
   "payment_method": null,
   "notes": null,
   "field_confidence": {{
-    "vendor_name": 95,
-    "invoice_no": 98,
-    "date": 97,
-    "due_date": 0,
-    "line_items": 90,
-    "grand_total": 96,
-    "currency": 85,
-    "bill_to": 88,
-    "payment_method": 0,
-    "notes": 0
+    "vendor_name": 95, "invoice_no": 98, "date": 97, "due_date": 0,
+    "line_items": 90, "grand_total": 96, "currency": 85,
+    "bill_to": 88, "payment_method": 0, "notes": 0
   }},
   "validation": {{"confidence": 95, "warnings": []}}
 }}
@@ -146,11 +140,11 @@ Required JSON structure:
     "payment_method": "string or null",
     "notes": "string or null",
     "field_confidence": {{
-        "vendor_name": "integer 0-100 — how confident you are this field is correct",
+        "vendor_name": "integer 0-100",
         "invoice_no": "integer 0-100",
         "date": "integer 0-100",
         "due_date": "integer 0-100",
-        "line_items": "integer 0-100 — overall confidence in the line items extraction",
+        "line_items": "integer 0-100",
         "grand_total": "integer 0-100",
         "currency": "integer 0-100",
         "bill_to": "integer 0-100",
@@ -162,21 +156,27 @@ Required JSON structure:
 
 Rules:
 - vendor_name is who SENT the invoice (the seller/supplier), NOT the buyer.
-- bill_to.name is who RECEIVES the invoice (the buyer/client). NEVER use labels like "Bill To", "Ship To", "Sold To" as the name — extract the actual person or company name written after those labels.
-- invoice_no: extract only the number/code, strip label words like "Invoice #", "Ref:", etc.
-- Dates MUST be YYYY-MM-DD. Example: "March 7, 2013" → "2013-03-07". null only if truly unparseable.
-- currency: detect from symbols ($→USD, €→EUR, £→GBP, د.ت→TND) or explicit text. For Tunisian invoices, default to TND.
-- tax: if grand_total and subtotal are both present and tax field is empty, calculate tax = grand_total - subtotal.
-- line_items: each physical row in the invoice table = exactly ONE item. Never split or duplicate a row.
-  * Product codes/SKUs on the same row belong to that item's description.
-  * Never create an item with all-null numeric fields.
-  * quantity must be a real count, never 0. Calculate from total/unit_price if missing.
-  * For service items (consulting, maintenance, training, etc.), quantity may represent hours/days/months.
-- All numeric values are plain numbers, no currency symbols.
+- bill_to.name is who RECEIVES the invoice (the buyer/client). NEVER use labels like "Bill To", "Ship To", "Facturé à", "العميل" as the name — extract the actual person or company name.
+- invoice_no: extract only the number/code, strip labels like "Invoice #", "Facture N°", "رقم الفاتورة", "Ref:", etc.
+- Dates MUST be YYYY-MM-DD. Examples: "March 7, 2013" → "2013-03-07", "07/03/2024" (French DD/MM) → "2024-03-07", "٧ مارس ٢٠٢٤" → "2024-03-07". null only if truly unparseable.
+- currency: detect from symbols ($→USD, €→EUR, £→GBP, د.ت→TND, DT→TND, DA→DZD, DH→MAD, ر.س→SAR, د.إ→AED) or explicit text. For Tunisian invoices, default to TND.
+- tax: if grand_total and subtotal are both present and tax is empty, calculate tax = grand_total - subtotal.
+- line_items: each physical row = exactly ONE item. Never split or duplicate.
+  * quantity must be real, never 0. Calculate from total/unit_price if missing.
+  * For service items (consulting, maintenance, formation, استشارة, صيانة), quantity may be hours/days/months.
+- All numeric values are plain numbers, no currency symbols. Convert Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) to standard digits.
 - Absent fields → null, never 0 or empty string.
-- field_confidence: for each field, give a confidence score 0-100 based on how clearly and unambiguously the value was found in the text. Use 0 if the field is null/absent. Use lower scores (30-60) for values that were guessed or ambiguous.
-- seller_vat_id / buyer_vat_id: Look for tax IDs (matricule fiscale, identifiant fiscal, VAT ID, TIN). Tunisian format: 7-digit number + letter + 3 chars (e.g. "1234567A/P/M/000"). Extract as-is.
-- For service invoices: preserve duration info in descriptions (e.g. "10 hours", "3 jours").
+- field_confidence: score 0-100 per field. Use 0 if null/absent. Lower (30-60) for guessed/ambiguous.
+- seller_vat_id / buyer_vat_id: Look for tax IDs. Common labels:
+  * English: VAT ID, Tax ID, TIN
+  * French: Matricule fiscale, Identifiant fiscal, N° TVA, SIRET
+  * Arabic: الرقم الجبائي, المعرف الجبائي, رقم التعريف الضريبي
+  Tunisian format: 7-digit + letter + 3 chars (e.g. "1234567A/P/M/000"). Extract as-is.
+
+Multilingual field recognition:
+- French: Facture=Invoice, Fournisseur=Vendor, Client=Customer, Montant=Amount, Date d'échéance=Due date, Sous-total/Total HT=Subtotal, TVA=Tax, Remise=Discount, Total TTC=Grand total, Mode de paiement=Payment method, Remarques/Observations=Notes
+- Arabic: فاتورة=Invoice, المورد/البائع=Vendor, العميل/المشتري=Customer, المبلغ=Amount, تاريخ الاستحقاق=Due date, المجموع الفرعي=Subtotal, الضريبة/ض.ق.م=Tax, خصم=Discount, المجموع الكلي=Grand total, طريقة الدفع=Payment method, ملاحظات=Notes
+- Preserve original text in descriptions (keep French accents éèêëàâùûçœ and Arabic characters).
 
 Raw invoice text:
 {text}
@@ -502,7 +502,11 @@ def extract_invoice_fields(text: str) -> dict:
     return result
 
 
-def extract_from_file(file_path: str) -> dict:
+def extract_from_file(file_path: str, lang: str = "auto") -> dict:
+    """
+    Extract invoice data from a file.
+    lang: OCR language hint — "auto", "en", "fr", "ar", "en+fr", etc.
+    """
     ext = os.path.splitext(file_path)[1].lower()
 
     # XML files → structured parser (no AI needed)
@@ -525,9 +529,9 @@ def extract_from_file(file_path: str) -> dict:
         return data
 
     if ext == ".pdf":
-        text = extract_text_from_pdf(file_path)
+        text = extract_text_from_pdf(file_path, lang=lang)
     elif ext in {".png", ".jpg", ".jpeg", ".webp"}:
-        text = extract_text_from_image(file_path)
+        text = extract_text_from_image(file_path, lang=lang)
     elif ext == ".txt":
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()

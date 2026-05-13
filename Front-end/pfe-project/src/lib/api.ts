@@ -137,6 +137,7 @@ export interface Invoice {
   created_at: string;
   updated_at?: string;
   tags: string[];
+  share_code?: string;
   source_format?: string;
   compliance_status?: string;
   invoice_category?: string;
@@ -167,6 +168,8 @@ export interface Invoice {
     };
     payment_method?: string | null;
     notes?: string | null;
+    logo?: string | null;
+    signature?: string | null;
     field_confidence?: {
       vendor_name?: number;
       invoice_no?: number;
@@ -278,10 +281,12 @@ export interface CreateInvoicePayload {
   payment_method?: string;
   notes?: string;
   tags?: string[];
+  logo?: string;
+  signature?: string;
 }
 
 export async function createInvoice(payload: CreateInvoicePayload) {
-  return request<{ success: boolean; message: string; invoice_id: string }>(
+  return request<{ success: boolean; message: string; invoice_id: string; share_code: string }>(
     "/api/invoices",
     {
       method: "POST",
@@ -333,9 +338,10 @@ interface ExtractAsyncResponse {
 
 type ExtractResponse = ExtractSyncResponse | ExtractAsyncResponse;
 
-export async function extractFile(file: File) {
+export async function extractFile(file: File, lang: string = "auto") {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("lang", lang);
   return request<ExtractResponse>("/api/extract-file", {
     method: "POST",
     body: formData,
@@ -905,6 +911,45 @@ export async function submitToTTN(invoiceId: string) {
 export async function getComplianceReport(invoiceId: string) {
   return request<{ success: boolean; report: ComplianceReport }>(
     `/api/invoices/${invoiceId}/compliance-report`
+  );
+}
+
+// ── Invoice QR Code ────────────────────────────────────────────────────
+
+export async function getInvoiceQRCodeUrl(invoiceId: string): Promise<string> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (typeof window !== "undefined") {
+    const orgId = localStorage.getItem("currentOrgId");
+    if (orgId) headers["X-Org-Id"] = orgId;
+  }
+  const res = await fetch(`${API_BASE}/api/invoices/${invoiceId}/qrcode`, { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new ApiError((errData as Record<string, string>).error || "QR code generation failed", res.status, errData);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+export async function getInvoiceQRCodeData(invoiceId: string) {
+  return request<{ success: boolean; qr_data: Record<string, unknown> }>(
+    `/api/invoices/${invoiceId}/qrcode-data`
+  );
+}
+
+// ── Invoice Share / Lookup ────────────────────────────────────────────
+
+export async function getInvoiceShareInfo(invoiceId: string) {
+  return request<{ success: boolean; invoice_id: string; share_code: string }>(
+    `/api/invoices/${invoiceId}/share-info`
+  );
+}
+
+export async function lookupInvoiceByCode(shareCode: string) {
+  return request<{ success: boolean; invoice: Invoice }>(
+    `/api/invoices/lookup/${encodeURIComponent(shareCode)}`
   );
 }
 

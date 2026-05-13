@@ -351,6 +351,9 @@ class TEJXMLGenerator:
         logger.info(f"Generating TEJ withholding certificate: ref={data.get('reference', 'N/A')}")
 
         try:
+            # Strip whitespace from all string fields to avoid XSD pattern failures
+            self._strip_strings(data)
+
             # Validate input data
             input_errors = self._validate_input(data)
             if input_errors:
@@ -760,6 +763,19 @@ class TEJXMLGenerator:
 
     # ── Private Methods ───────────────────────────────────────────────────────
 
+    def _strip_strings(self, obj):
+        """Recursively strip whitespace from all string values."""
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if isinstance(v, str):
+                    obj[k] = v.strip()
+                elif isinstance(v, (dict, list)):
+                    self._strip_strings(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                if isinstance(item, (dict, list)):
+                    self._strip_strings(item)
+
     def _validate_input(self, data: dict) -> list:
         """Validate required fields in input data."""
         errors = []
@@ -834,8 +850,8 @@ class TEJXMLGenerator:
         # Declarant
         dec_data = data["declarant"]
         declarant = etree.SubElement(root, f"{{{self.ns}}}Declarant")
-        etree.SubElement(declarant, f"{{{self.ns}}}MatriculeFiscal").text = dec_data["tax_id"]
-        etree.SubElement(declarant, f"{{{self.ns}}}RaisonSociale").text = dec_data["name"]
+        etree.SubElement(declarant, f"{{{self.ns}}}MatriculeFiscal").text = dec_data["tax_id"].strip()
+        etree.SubElement(declarant, f"{{{self.ns}}}RaisonSociale").text = dec_data["name"].strip()
         self._build_address(declarant, dec_data.get("address", {}))
         if dec_data.get("activity"):
             etree.SubElement(declarant, f"{{{self.ns}}}Activite").text = dec_data["activity"]
@@ -849,9 +865,9 @@ class TEJXMLGenerator:
 
         for ben_data in data["beneficiaries"]:
             ben_el = etree.SubElement(beneficiaires, f"{{{self.ns}}}Beneficiaire")
-            etree.SubElement(ben_el, f"{{{self.ns}}}Identifiant").text = ben_data["id"]
-            etree.SubElement(ben_el, f"{{{self.ns}}}NomOuRaisonSociale").text = ben_data["name"]
-            etree.SubElement(ben_el, f"{{{self.ns}}}TypeBeneficiaire").text = ben_data["type"]
+            etree.SubElement(ben_el, f"{{{self.ns}}}Identifiant").text = ben_data["id"].strip()
+            etree.SubElement(ben_el, f"{{{self.ns}}}NomOuRaisonSociale").text = ben_data["name"].strip()
+            etree.SubElement(ben_el, f"{{{self.ns}}}TypeBeneficiaire").text = ben_data["type"].strip()
 
             if ben_data.get("address"):
                 self._build_address(ben_el, ben_data["address"])

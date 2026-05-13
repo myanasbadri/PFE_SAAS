@@ -61,6 +61,12 @@ import {
   ShieldCheck,
   ShieldAlert,
   ShieldQuestion,
+  Share2,
+  QrCode,
+  Image,
+  PenTool,
+  Copy,
+  SearchCode,
 } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
 import jsPDF from "jspdf";
@@ -90,6 +96,9 @@ import {
   getInvoiceHistory,
   exportAllInvoicesExcel,
   exportInvoiceExcel,
+  getInvoiceQRCodeUrl,
+  getInvoiceShareInfo,
+  lookupInvoiceByCode,
   ApiError,
   type Invoice,
   type InvoiceSearchParams,
@@ -155,6 +164,8 @@ interface InvoiceForm {
   grand_total: string;
   payment_method: string;
   notes: string;
+  logo: string;
+  signature: string;
 }
 
 const emptyForm = (): InvoiceForm => ({
@@ -173,6 +184,8 @@ const emptyForm = (): InvoiceForm => ({
   grand_total: "",
   payment_method: "",
   notes: "",
+  logo: "",
+  signature: "",
 });
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -226,6 +239,19 @@ export const InvoiceManagement = () => {
   const [vendorOptions, setVendorOptions] = useState<string[]>([]);
   const [currencyOptions, setCurrencyOptions] = useState<string[]>([]);
   const [statusOptions, setStatusOptions] = useState<string[]>([]);
+
+  // ── Share / QR Code State ────────────────────────────────────────────
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareCode, setShareCode] = useState("");
+  const [shareQrUrl, setShareQrUrl] = useState("");
+  const [shareLoading, setShareLoading] = useState(false);
+
+  // ── Lookup State ────────────────────────────────────────────────────
+  const [lookupDialogOpen, setLookupDialogOpen] = useState(false);
+  const [lookupCode, setLookupCode] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState<Invoice | null>(null);
+  const [lookupError, setLookupError] = useState("");
 
   // ── Debounce search input ─────────────────────────────────────────────
   useEffect(() => {
@@ -365,13 +391,15 @@ export const InvoiceManagement = () => {
 
   // ── PDF export (professional layout) ───────────────────────────────────
 
-  const exportToPDF = (invoice: DisplayInvoice) => {
+  const exportToPDF = async (invoice: DisplayInvoice) => {
     const raw = rawInvoices.find((r) => r.id === invoice._key);
     const data = raw?.data || {};
     const totals = data.totals || {};
     const billTo = data.bill_to || {};
     const lineItems = data.line_items || [];
     const currency = totals.currency || "USD";
+    const logo = data.logo || null;
+    const signature = data.signature || null;
 
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
@@ -379,12 +407,30 @@ export const InvoiceManagement = () => {
 
     doc.setFillColor(10, 37, 64);
     doc.rect(0, 0, pageW, 38, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.text("SmartInvoice AI", 16, 24);
+
+    // Add logo in header if available
+    if (logo) {
+      try {
+        doc.addImage(logo, "PNG", 16, 5, 28, 28);
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.setFont("helvetica", "bold");
+        doc.text(data.vendor_name || "SmartInvoice AI", 50, 24);
+      } catch {
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22);
+        doc.setFont("helvetica", "bold");
+        doc.text("SmartInvoice AI", 16, 24);
+      }
+    } else {
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text("SmartInvoice AI", 16, 24);
+    }
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
+    doc.setTextColor(255, 255, 255);
     doc.text("AI-Powered Invoice Management", pageW - 16, 24, {
       align: "right",
     });
@@ -557,7 +603,42 @@ export const InvoiceManagement = () => {
       doc.setTextColor(80, 80, 80);
       const noteLines = doc.splitTextToSize(String(data.notes), pageW - 32);
       doc.text(noteLines, 16, y);
+      y += noteLines.length * 5;
     }
+
+    // Signature
+    if (signature) {
+      y += 14;
+      if (y > 240) { doc.addPage(); y = 20; }
+      doc.setTextColor(10, 37, 64);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("Authorized Signature:", 16, y);
+      y += 4;
+      try {
+        doc.addImage(signature, "PNG", 16, y, 50, 20);
+        y += 22;
+      } catch { /* skip if image fails */ }
+      doc.setDrawColor(80, 80, 80);
+      doc.line(16, y, 80, y);
+    }
+
+    // QR Code (fetch and embed)
+    try {
+      const qrUrl = await getInvoiceQRCodeUrl(invoice._key);
+      const qrRes = await fetch(qrUrl);
+      const qrBlob = await qrRes.blob();
+      const qrBase64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(qrBlob);
+      });
+      const pageH = doc.internal.pageSize.getHeight();
+      doc.addImage(qrBase64, "PNG", pageW - 46, pageH - 52, 30, 30);
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(6);
+      doc.text("Scan to verify", pageW - 31, pageH - 20, { align: "center" });
+    } catch { /* skip QR if generation fails */ }
 
     const pageH = doc.internal.pageSize.getHeight();
     doc.setFillColor(10, 37, 64);
@@ -568,6 +649,13 @@ export const InvoiceManagement = () => {
     doc.text("Generated by SmartInvoice AI", pageW / 2, pageH - 8, {
       align: "center",
     });
+
+    // Share code in footer
+    const shareCodeVal = raw?.share_code;
+    if (shareCodeVal) {
+      doc.setFontSize(7);
+      doc.text(`Share Code: ${shareCodeVal}`, 16, pageH - 8);
+    }
 
     doc.save(`invoice_${invoice.id}.pdf`);
     toast.success(`Invoice ${invoice.id} exported as PDF`);
@@ -699,7 +787,7 @@ export const InvoiceManagement = () => {
         return isNaN(n) ? null : n;
       };
 
-      await apiCreateInvoice({
+      const result = await apiCreateInvoice({
         vendor_name: form.vendor_name || undefined,
         invoice_no: form.invoice_no || undefined,
         date: form.date || undefined,
@@ -726,12 +814,26 @@ export const InvoiceManagement = () => {
         },
         payment_method: form.payment_method || undefined,
         notes: form.notes || undefined,
+        logo: form.logo || undefined,
+        signature: form.signature || undefined,
       });
 
       toast.success("Invoice created successfully!");
       setForm(emptyForm());
       setIsDialogOpen(false);
       fetchInvoices();
+
+      // Show share dialog with QR code
+      if (result.share_code) {
+        setShareCode(result.share_code);
+        try {
+          const qrUrl = await getInvoiceQRCodeUrl(result.invoice_id);
+          setShareQrUrl(qrUrl);
+        } catch {
+          setShareQrUrl("");
+        }
+        setShareDialogOpen(true);
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         toast.error(err.message);
@@ -740,6 +842,74 @@ export const InvoiceManagement = () => {
       }
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // ── Image upload helper ──────────────────────────────────────────────
+
+  const handleImageUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: "logo" | "signature",
+    formSetter: React.Dispatch<React.SetStateAction<InvoiceForm>>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be less than 2MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      formSetter((prev) => ({ ...prev, [field]: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ── Share invoice ──────────────────────────────────────────────────
+
+  const openShareDialog = async (invoice: DisplayInvoice) => {
+    setShareLoading(true);
+    setShareDialogOpen(true);
+    setShareCode("");
+    setShareQrUrl("");
+    try {
+      const info = await getInvoiceShareInfo(invoice._key);
+      setShareCode(info.share_code);
+      const qrUrl = await getInvoiceQRCodeUrl(invoice._key);
+      setShareQrUrl(qrUrl);
+    } catch {
+      toast.error("Failed to load share info");
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const copyShareCode = () => {
+    navigator.clipboard.writeText(shareCode);
+    toast.success(t("shareCodeCopied"));
+  };
+
+  // ── Lookup invoice ────────────────────────────────────────────────
+
+  const handleLookup = async () => {
+    if (!lookupCode.trim()) {
+      toast.error(t("enterShareCode"));
+      return;
+    }
+    setLookupLoading(true);
+    setLookupResult(null);
+    setLookupError("");
+    try {
+      const res = await lookupInvoiceByCode(lookupCode.trim());
+      setLookupResult(res.invoice);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setLookupError(err.message);
+      } else {
+        setLookupError(t("invoiceNotFound"));
+      }
+    } finally {
+      setLookupLoading(false);
     }
   };
 
@@ -778,6 +948,8 @@ export const InvoiceManagement = () => {
         grand_total: t.grand_total != null ? String(t.grand_total) : "",
         payment_method: d.payment_method || "",
         notes: d.notes || "",
+        logo: d.logo || "",
+        signature: d.signature || "",
       });
       setIsEditDialogOpen(true);
     } catch {
@@ -824,6 +996,8 @@ export const InvoiceManagement = () => {
           },
           payment_method: editForm.payment_method || null,
           notes: editForm.notes || null,
+          logo: editForm.logo || null,
+          signature: editForm.signature || null,
         },
       });
 
@@ -1020,6 +1194,20 @@ export const InvoiceManagement = () => {
               {t("exportAllExcel")}
             </Button>
           )}
+
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => {
+              setLookupDialogOpen(true);
+              setLookupCode("");
+              setLookupResult(null);
+              setLookupError("");
+            }}
+          >
+            <SearchCode className="h-4 w-4" />
+            {t("lookupInvoice")}
+          </Button>
 
           <Dialog
             open={isDialogOpen}
@@ -1374,6 +1562,94 @@ export const InvoiceManagement = () => {
                           placeholder="0.00"
                           className="h-9 w-36 text-sm text-right font-bold border-[#10B981]/30 focus:border-[#10B981]"
                         />
+                      </div>
+                    </div>
+                  </section>
+
+                  <Separator />
+
+                  {/* Logo & Signature */}
+                  <section>
+                    <div className="flex items-center gap-2 mb-3">
+                      <PenTool className="h-4 w-4 text-foreground" />
+                      <h3 className="text-sm font-semibold text-foreground">
+                        {t("logoAndSignature")}
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Image className="h-3 w-3" />
+                          {t("companyLogo")}
+                        </Label>
+                        <div className="border-2 border-dashed rounded-lg p-3 text-center hover:border-[#10B981]/50 transition-colors">
+                          {form.logo ? (
+                            <div className="relative">
+                              <img
+                                src={form.logo}
+                                alt="Logo"
+                                className="max-h-16 mx-auto object-contain"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setForm((prev) => ({ ...prev, logo: "" }))}
+                                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer block">
+                              <Image className="h-8 w-8 mx-auto text-muted-foreground/50 mb-1" />
+                              <span className="text-xs text-muted-foreground">
+                                {t("clickToUploadLogo")}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => handleImageUpload(e, "logo", setForm)}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                          <PenTool className="h-3 w-3" />
+                          {t("signature")}
+                        </Label>
+                        <div className="border-2 border-dashed rounded-lg p-3 text-center hover:border-[#10B981]/50 transition-colors">
+                          {form.signature ? (
+                            <div className="relative">
+                              <img
+                                src={form.signature}
+                                alt="Signature"
+                                className="max-h-16 mx-auto object-contain"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setForm((prev) => ({ ...prev, signature: "" }))}
+                                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer block">
+                              <PenTool className="h-8 w-8 mx-auto text-muted-foreground/50 mb-1" />
+                              <span className="text-xs text-muted-foreground">
+                                {t("clickToUploadSignature")}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => handleImageUpload(e, "signature", setForm)}
+                              />
+                            </label>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -1951,6 +2227,13 @@ export const InvoiceManagement = () => {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem
+                                  onClick={() => openShareDialog(invoice)}
+                                  className="gap-2 cursor-pointer"
+                                >
+                                  <Share2 className="h-4 w-4 text-[#10B981]" />
+                                  {t("shareQrCode")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   onClick={() => exportToPDF(invoice)}
                                   className="gap-2 cursor-pointer"
                                 >
@@ -2312,6 +2595,60 @@ export const InvoiceManagement = () => {
 
               <Separator />
 
+              {/* Logo & Signature (Edit) */}
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <PenTool className="h-4 w-4 text-foreground" />
+                  <h3 className="text-sm font-semibold text-foreground">{t("logoAndSignature")}</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Image className="h-3 w-3" /> {t("companyLogo")}
+                    </Label>
+                    <div className="border-2 border-dashed rounded-lg p-3 text-center hover:border-blue-500/50 transition-colors">
+                      {editForm.logo ? (
+                        <div className="relative">
+                          <img src={editForm.logo} alt="Logo" className="max-h-16 mx-auto object-contain" />
+                          <button type="button" onClick={() => setEditForm((prev) => ({ ...prev, logo: "" }))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer block">
+                          <Image className="h-8 w-8 mx-auto text-muted-foreground/50 mb-1" />
+                          <span className="text-xs text-muted-foreground">{t("clickToUploadLogo")}</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, "logo", setEditForm)} />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                      <PenTool className="h-3 w-3" /> {t("signature")}
+                    </Label>
+                    <div className="border-2 border-dashed rounded-lg p-3 text-center hover:border-blue-500/50 transition-colors">
+                      {editForm.signature ? (
+                        <div className="relative">
+                          <img src={editForm.signature} alt="Signature" className="max-h-16 mx-auto object-contain" />
+                          <button type="button" onClick={() => setEditForm((prev) => ({ ...prev, signature: "" }))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer block">
+                          <PenTool className="h-8 w-8 mx-auto text-muted-foreground/50 mb-1" />
+                          <span className="text-xs text-muted-foreground">{t("clickToUploadSignature")}</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, "signature", setEditForm)} />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <Separator />
+
               {/* Payment & Notes */}
               <section>
                 <div className="grid grid-cols-2 gap-4">
@@ -2341,6 +2678,271 @@ export const InvoiceManagement = () => {
               {isEditSaving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Share / QR Code Dialog ─────────────────────────────────────── */}
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#0A2540] to-[#10B981] flex items-center justify-center">
+                <QrCode className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg text-foreground">
+                  {t("shareInvoice")}
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t("shareCodeDesc")}
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-5 py-4">
+            {shareLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-[#10B981]" />
+              </div>
+            ) : (
+              <>
+                {/* QR Code */}
+                {shareQrUrl && (
+                  <div className="flex justify-center">
+                    <div className="bg-white p-4 rounded-xl shadow-sm border">
+                      <img
+                        src={shareQrUrl}
+                        alt="Invoice QR Code"
+                        className="w-48 h-48"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Share Code */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">{t("shareCodeLabel")}</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-muted/50 border rounded-lg px-4 py-3 font-mono text-lg font-bold text-center tracking-widest text-foreground">
+                      {shareCode}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={copyShareCode}
+                      className="h-12 w-12 shrink-0"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {t("shareCodeDesc")}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Lookup Invoice Dialog ──────────────────────────────────────── */}
+      <Dialog open={lookupDialogOpen} onOpenChange={setLookupDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#0A2540] to-[#10B981] flex items-center justify-center">
+                <SearchCode className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg text-foreground">
+                  {t("lookupInvoice")}
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t("lookupDesc")}
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[calc(85vh-120px)]">
+            <div className="px-6 py-5 space-y-5">
+              {/* Code Input */}
+              <div className="flex gap-2">
+                <Input
+                  value={lookupCode}
+                  onChange={(e) => setLookupCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. INV-A3X9K2B7"
+                  className="font-mono text-sm tracking-wider"
+                  onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+                />
+                <Button
+                  onClick={handleLookup}
+                  disabled={lookupLoading}
+                  className="bg-[#10B981] hover:bg-[#10B981]/90 text-white gap-2 shrink-0"
+                >
+                  {lookupLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                  {t("search")}
+                </Button>
+              </div>
+
+              {/* Error */}
+              {lookupError && (
+                <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4 text-center">
+                  <AlertTriangle className="h-5 w-5 text-red-500 mx-auto mb-2" />
+                  <p className="text-sm text-red-600 dark:text-red-400">{lookupError}</p>
+                </div>
+              )}
+
+              {/* Result */}
+              {lookupResult && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gradient-to-r from-[#0A2540] to-[#0A2540]/90 px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-white font-semibold text-sm">
+                        {lookupResult.data?.vendor_name || "Invoice"}
+                      </h3>
+                      <Badge variant="secondary" className="text-xs">
+                        {lookupResult.data?.invoice_no || lookupResult.id?.slice(0, 8)}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {/* Key Details */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground text-xs">{t("date")}</span>
+                        <p className="font-medium">{lookupResult.data?.date || "N/A"}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs">{t("dueDate")}</span>
+                        <p className="font-medium">{lookupResult.data?.due_date || "N/A"}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs">{t("status")}</span>
+                        <p className="font-medium capitalize">{lookupResult.status}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs">{t("paymentMethod")}</span>
+                        <p className="font-medium">{lookupResult.data?.payment_method || "N/A"}</p>
+                      </div>
+                    </div>
+
+                    {/* Bill To */}
+                    {lookupResult.data?.bill_to?.name && (
+                      <>
+                        <Separator />
+                        <div>
+                          <span className="text-muted-foreground text-xs">{t("billTo")}</span>
+                          <p className="font-medium text-sm">{lookupResult.data.bill_to.name}</p>
+                          {lookupResult.data.bill_to.email && (
+                            <p className="text-xs text-muted-foreground">{lookupResult.data.bill_to.email}</p>
+                          )}
+                          {lookupResult.data.bill_to.address && (
+                            <p className="text-xs text-muted-foreground">{lookupResult.data.bill_to.address}</p>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Line Items */}
+                    {lookupResult.data?.line_items && lookupResult.data.line_items.length > 0 && (
+                      <>
+                        <Separator />
+                        <div>
+                          <span className="text-muted-foreground text-xs mb-2 block">{t("lineItems")}</span>
+                          <div className="border rounded text-xs">
+                            <div className="grid grid-cols-4 gap-2 p-2 bg-muted/30 font-medium">
+                              <span className="col-span-2">{t("description")}</span>
+                              <span className="text-right">{t("qty")}</span>
+                              <span className="text-right">{t("total")}</span>
+                            </div>
+                            {lookupResult.data.line_items.map((item, i) => (
+                              <div key={i} className="grid grid-cols-4 gap-2 p-2 border-t">
+                                <span className="col-span-2 truncate">{item.description || "-"}</span>
+                                <span className="text-right">{item.quantity ?? "-"}</span>
+                                <span className="text-right font-medium">
+                                  {item.total != null ? Number(item.total).toFixed(2) : "-"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Totals */}
+                    <Separator />
+                    <div className="bg-muted/20 rounded-lg p-3 space-y-1.5 text-sm">
+                      {lookupResult.data?.totals?.subtotal != null && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t("subtotal")}</span>
+                          <span>{Number(lookupResult.data.totals.subtotal).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {lookupResult.data?.totals?.tax != null && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t("tax")}</span>
+                          <span>{Number(lookupResult.data.totals.tax).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {lookupResult.data?.totals?.discount != null && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t("discount")}</span>
+                          <span>-{Number(lookupResult.data.totals.discount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <Separator />
+                      <div className="flex justify-between font-bold text-base">
+                        <span>{t("grandTotal")}</span>
+                        <span className="text-[#10B981]">
+                          {lookupResult.data?.totals?.grand_total != null
+                            ? `${Number(lookupResult.data.totals.grand_total).toFixed(2)} ${lookupResult.data.totals.currency || "USD"}`
+                            : "N/A"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Logo & Signature */}
+                    {(lookupResult.data?.logo || lookupResult.data?.signature) && (
+                      <>
+                        <Separator />
+                        <div className="grid grid-cols-2 gap-4">
+                          {lookupResult.data.logo && (
+                            <div>
+                              <span className="text-muted-foreground text-xs block mb-1">{t("companyLogo")}</span>
+                              <img src={lookupResult.data.logo} alt="Logo" className="max-h-12 object-contain" />
+                            </div>
+                          )}
+                          {lookupResult.data.signature && (
+                            <div>
+                              <span className="text-muted-foreground text-xs block mb-1">{t("signature")}</span>
+                              <img src={lookupResult.data.signature} alt="Signature" className="max-h-12 object-contain" />
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Notes */}
+                    {lookupResult.data?.notes && (
+                      <>
+                        <Separator />
+                        <div>
+                          <span className="text-muted-foreground text-xs">{t("notes")}</span>
+                          <p className="text-sm mt-1">{lookupResult.data.notes}</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>

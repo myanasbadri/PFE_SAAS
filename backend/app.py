@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import string
+import secrets
 from datetime import datetime
 from collections import defaultdict
 from bson import ObjectId
@@ -51,6 +53,16 @@ CORS(app, origins=cors_origins, supports_credentials=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs("logs", exist_ok=True)
 os.makedirs("tmp_pdf_ocr", exist_ok=True)
+
+
+def generate_share_code(length=8):
+    """Generate a unique short share code like INV-A3X9K2B7."""
+    alphabet = string.ascii_uppercase + string.digits
+    while True:
+        code = "INV-" + "".join(secrets.choice(alphabet) for _ in range(length))
+        if not invoices_collection.find_one({"share_code": code}):
+            return code
+
 
 @app.route("/api/health")
 def health_check():
@@ -401,9 +413,12 @@ def extract_file():
 
     file.save(file_path)
 
+    # Language hint for OCR (auto, en, fr, ar, en+fr, etc.)
+    lang = request.form.get("lang", "auto").strip().lower() or "auto"
+
     # Try async via Celery/Redis first; fall back to synchronous if Redis is unavailable
     try:
-        task = process_invoice_task.delay(g.user["user_id"], file_path, filename, g.org["org_id"])
+        task = process_invoice_task.delay(g.user["user_id"], file_path, filename, g.org["org_id"], lang)
         return jsonify({
             "success": True,
             "message": "File processing started in background",
@@ -412,7 +427,7 @@ def extract_file():
         }), 202
     except Exception:
         # Redis not running — process synchronously so testing still works
-        result = run_invoice_processing(g.user["user_id"], file_path, filename, org_id=g.org["org_id"])
+        result = run_invoice_processing(g.user["user_id"], file_path, filename, org_id=g.org["org_id"], lang=lang)
         inv_id = result.get("invoice_id", "")
         ext_data = result.get("extracted_data", {})
         confidence = ext_data.get("validation", {}).get("confidence")
@@ -572,12 +587,16 @@ def create_invoice():
     payment_method = data.get("payment_method", "").strip() or None
     notes = data.get("notes", "").strip() or None
     tags = data.get("tags") or []
+    logo = data.get("logo") or None  # base64 image
+    signature = data.get("signature") or None  # base64 image
 
     if not vendor_name and not invoice_no:
         return jsonify({
             "success": False,
             "error": "At least vendor name or invoice number is required"
         }), 400
+
+    share_code = generate_share_code()
 
     invoice_data = {
         "vendor_name": vendor_name,
@@ -599,6 +618,8 @@ def create_invoice():
         },
         "payment_method": payment_method,
         "notes": notes,
+        "logo": logo,
+        "signature": signature,
         "validation": {
             "is_valid": True,
             "confidence": 100,
@@ -613,6 +634,7 @@ def create_invoice():
         "filename": "manual_entry",
         "original_filename": f"manual_{invoice_no or 'invoice'}",
         "status": "completed",
+        "share_code": share_code,
         "data": invoice_data,
         "tags": tags,
         "created_at": now_iso(),
@@ -635,7 +657,8 @@ def create_invoice():
     return jsonify({
         "success": True,
         "message": "Invoice created successfully",
-        "invoice_id": str(result.inserted_id)
+        "invoice_id": str(result.inserted_id),
+        "share_code": share_code,
     }), 201
 
 
@@ -749,6 +772,7 @@ def get_invoices():
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
             "tags": doc.get("tags", []),
+            "share_code": doc.get("share_code"),
             "data": doc.get("data", {}),
         })
 
@@ -823,6 +847,7 @@ def get_invoice_by_id(invoice_id):
             "created_at": doc.get("created_at"),
             "updated_at": doc.get("updated_at"),
             "tags": doc.get("tags", []),
+            "share_code": doc.get("share_code"),
             "data": doc.get("data", {}),
         }
 
@@ -1075,6 +1100,103 @@ def verify_signature_endpoint(invoice_id):
         )
 
         return jsonify({"success": True, "invoice_id": invoice_id, "signature": result}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/invoices/<invoice_id>/qrcode", methods=["GET"])
+@token_required
+@org_required
+def generate_invoice_qrcode(invoice_id):
+    """Generate a QR code image for an invoice containing tax-relevant data."""
+    try:
+        import qrcode
+        import io as _io
+        import hashlib as _hashlib
+    except ImportError:
+        return jsonify({"success": False, "error": "qrcode package not installed"}), 500
+
+    try:
+        doc = invoices_collection.find_one({"_id": ObjectId(invoice_id)})
+        if not doc:
+            return jsonify({"success": False, "error": "Invoice not found"}), 404
+        if doc.get("org_id") != g.org["org_id"]:
+            return jsonify({"success": False, "error": "Access denied"}), 403
+
+        data = doc.get("data", {})
+        totals = data.get("totals", {})
+        share_code = doc.get("share_code", "")
+
+        # Build QR payload: share code for quick lookup + key invoice info
+        qr_payload = {
+            "share_code": share_code,
+            "inv": data.get("invoice_no", ""),
+            "date": data.get("date", ""),
+            "vendor": data.get("vendor_name", ""),
+            "total": totals.get("grand_total", 0),
+            "tax": totals.get("tax", 0),
+            "currency": totals.get("currency", "TND"),
+        }
+
+        # Add checksum for verification
+        payload_str = json.dumps(qr_payload, separators=(",", ":"), sort_keys=True)
+        qr_payload["checksum"] = _hashlib.sha256(payload_str.encode()).hexdigest()[:16]
+
+        qr_data = json.dumps(qr_payload, separators=(",", ":"))
+
+        # Generate QR code image
+        qr = qrcode.QRCode(version=1, box_size=10, border=4,
+                            error_correction=qrcode.constants.ERROR_CORRECT_M)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        # Return as PNG
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+
+        from flask import send_file
+        return send_file(buf, mimetype="image/png",
+                         download_name=f"invoice_qr_{data.get('invoice_no', invoice_id)}.png")
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/invoices/<invoice_id>/qrcode-data", methods=["GET"])
+@token_required
+@org_required
+def get_invoice_qrcode_data(invoice_id):
+    """Return the QR code data payload for an invoice (JSON)."""
+    try:
+        import hashlib as _hashlib
+
+        doc = invoices_collection.find_one({"_id": ObjectId(invoice_id)})
+        if not doc:
+            return jsonify({"success": False, "error": "Invoice not found"}), 404
+        if doc.get("org_id") != g.org["org_id"]:
+            return jsonify({"success": False, "error": "Access denied"}), 403
+
+        data = doc.get("data", {})
+        totals = data.get("totals", {})
+        share_code = doc.get("share_code", "")
+
+        qr_payload = {
+            "share_code": share_code,
+            "inv": data.get("invoice_no", ""),
+            "date": data.get("date", ""),
+            "vendor": data.get("vendor_name", ""),
+            "total": totals.get("grand_total", 0),
+            "tax": totals.get("tax", 0),
+            "currency": totals.get("currency", "TND"),
+        }
+
+        payload_str = json.dumps(qr_payload, separators=(",", ":"), sort_keys=True)
+        qr_payload["checksum"] = _hashlib.sha256(payload_str.encode()).hexdigest()[:16]
+
+        return jsonify({"success": True, "qr_data": qr_payload}), 200
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -1742,13 +1864,17 @@ Your capabilities:
 - Help with financial forecasting based on historical data
 - Explain invoice statuses, review needs, and data quality
 
-Guidelines:
+Response style — VERY IMPORTANT:
+- Keep responses SHORT and conversational, like a friendly colleague — 2 to 4 sentences max for simple questions.
+- NEVER use numbered lists (1. 2. 3.) or long bullet point lists.
+- Use short paragraphs instead. Separate ideas with line breaks, not bullets.
+- Bold **key numbers** or **important words** for emphasis, but keep it minimal.
+- If you need to mention multiple items, weave them naturally into a sentence rather than listing them.
+- Think of your tone as a smart friend giving quick advice, not a formal report.
 - Always base your answers on the REAL data provided below. Never make up numbers.
 - If the data is insufficient to answer a question, say so honestly.
-- Be concise but thorough. Use bullet points and formatting for clarity.
 - When mentioning amounts, always include the currency.
 - If the user asks about something outside of invoice/financial data, politely redirect.
-- Be professional, helpful, and proactive in offering insights.
 
 {user_data}
 """
@@ -2440,7 +2566,16 @@ def _extract_totals(beneficiaries: list) -> dict:
     for ben in beneficiaries:
         for op in ben.get("operations", []):
             gross = float(op.get("gross_amount", 0))
-            rate = float(op.get("rate", 0) or 0)
+            rate = op.get("rate")
+            # If rate is null/None, auto-calculate from withholding_type + rate_category
+            if rate is None and op.get("withholding_type") and op.get("rate_category"):
+                wh_type = op["withholding_type"]
+                rate_cat = op["rate_category"]
+                if wh_type in WITHHOLDING_RATES:
+                    rates = WITHHOLDING_RATES[wh_type]["rates"]
+                    if rate_cat in rates:
+                        rate = float(rates[rate_cat])
+            rate = float(rate or 0)
             wh = gross * rate
             total_gross += gross
             total_wh += wh
@@ -2452,6 +2587,87 @@ def _extract_totals(beneficiaries: list) -> dict:
         "operation_count": count,
         "beneficiary_count": len(beneficiaries),
     }
+
+
+# ── Invoice Lookup by Share Code ──────────────────────────────────────────
+
+@app.route("/api/invoices/lookup/<share_code>", methods=["GET"])
+@token_required
+def lookup_invoice_by_code(share_code):
+    """Look up an invoice by its share code. Any authenticated user can access."""
+    try:
+        doc = invoices_collection.find_one({"share_code": share_code})
+        if not doc:
+            return jsonify({"success": False, "error": "Invoice not found"}), 404
+
+        data = doc.get("data", {})
+        totals = data.get("totals", {})
+        bill_to = data.get("bill_to", {})
+
+        invoice = {
+            "id": str(doc["_id"]),
+            "share_code": doc.get("share_code"),
+            "status": doc.get("status", "completed"),
+            "created_at": doc.get("created_at"),
+            "data": {
+                "vendor_name": data.get("vendor_name"),
+                "invoice_no": data.get("invoice_no"),
+                "date": data.get("date"),
+                "due_date": data.get("due_date"),
+                "line_items": data.get("line_items", []),
+                "totals": {
+                    "subtotal": totals.get("subtotal"),
+                    "tax": totals.get("tax"),
+                    "discount": totals.get("discount"),
+                    "grand_total": totals.get("grand_total"),
+                    "currency": totals.get("currency"),
+                },
+                "bill_to": {
+                    "name": bill_to.get("name"),
+                    "address": bill_to.get("address"),
+                    "email": bill_to.get("email"),
+                },
+                "payment_method": data.get("payment_method"),
+                "notes": data.get("notes"),
+                "logo": data.get("logo"),
+                "signature": data.get("signature"),
+            },
+        }
+
+        return jsonify({"success": True, "invoice": invoice}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/invoices/<invoice_id>/share-info", methods=["GET"])
+@token_required
+@org_required
+def get_invoice_share_info(invoice_id):
+    """Get the share code and QR code data for an invoice."""
+    try:
+        doc = invoices_collection.find_one({"_id": ObjectId(invoice_id)})
+        if not doc:
+            return jsonify({"success": False, "error": "Invoice not found"}), 404
+        if doc.get("org_id") != g.org["org_id"]:
+            return jsonify({"success": False, "error": "Access denied"}), 403
+
+        share_code = doc.get("share_code")
+        if not share_code:
+            share_code = generate_share_code()
+            invoices_collection.update_one(
+                {"_id": ObjectId(invoice_id)},
+                {"$set": {"share_code": share_code}}
+            )
+
+        return jsonify({
+            "success": True,
+            "invoice_id": invoice_id,
+            "share_code": share_code,
+        }), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 
 
 if __name__ == "__main__":

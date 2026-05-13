@@ -291,8 +291,22 @@ export default function WithholdingTax() {
         toast.error(t("tejGenerateFailed"));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Generation failed";
-      toast.error(msg);
+      // Show detailed validation errors from backend
+      if (err && typeof err === "object" && "data" in err) {
+        const apiErr = err as { data: { errors?: string[]; error?: string } };
+        const errors = apiErr.data?.errors;
+        if (errors && errors.length > 0) {
+          errors.forEach((e: string | { message?: string }) => {
+            const msg = typeof e === "string" ? e : e.message || "Validation error";
+            toast.error(msg);
+          });
+        } else {
+          toast.error(apiErr.data?.error || (err instanceof Error ? err.message : "Generation failed"));
+        }
+      } else {
+        const msg = err instanceof Error ? err.message : "Generation failed";
+        toast.error(msg);
+      }
     } finally {
       setGenerating(false);
     }
@@ -332,8 +346,21 @@ export default function WithholdingTax() {
         toast.error(t("tejGenerateFailed"));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Batch generation failed";
-      toast.error(msg);
+      if (err && typeof err === "object" && "data" in err) {
+        const apiErr = err as { data: { errors?: string[]; error?: string } };
+        const errors = apiErr.data?.errors;
+        if (errors && errors.length > 0) {
+          errors.forEach((e: string | { message?: string }) => {
+            const msg = typeof e === "string" ? e : e.message || "Validation error";
+            toast.error(msg);
+          });
+        } else {
+          toast.error(apiErr.data?.error || "Batch generation failed");
+        }
+      } else {
+        const msg = err instanceof Error ? err.message : "Batch generation failed";
+        toast.error(msg);
+      }
     } finally {
       setGenerating(false);
     }

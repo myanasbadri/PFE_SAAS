@@ -125,6 +125,29 @@ const translations: Record<Language, Record<string, string>> = {
     creating: 'Creating...',
     manageExport: 'Manage and export your invoices with AI-powered tools',
 
+    // ── Logo & Signature ───────────────────────────────────────
+    logoAndSignature: 'Logo & Signature',
+    companyLogo: 'Company Logo',
+    clickToUploadLogo: 'Click to upload logo',
+    signature: 'Signature',
+    clickToUploadSignature: 'Click to upload signature',
+    authorizedSignature: 'Authorized Signature',
+
+    // ── Share & QR Code ────────────────────────────────────────
+    shareInvoice: 'Share Invoice',
+    shareQrCode: 'Share / QR Code',
+    shareCodeLabel: 'Share Code',
+    shareCodeDesc: 'Anyone on the platform can use this code to view the invoice details',
+    shareCodeCopied: 'Share code copied!',
+    scanToVerify: 'Scan to verify',
+
+    // ── Invoice Lookup ─────────────────────────────────────────
+    lookupInvoice: 'Lookup Invoice',
+    lookupDesc: 'Enter a share code to view invoice details',
+    enterShareCode: 'Enter a share code',
+    invoiceNotFound: 'Invoice not found',
+    search: 'Search',
+
     // ── AI Advisor ──────────────────────────────────────────────
     askAI: 'Ask AI Advisor...',
     send: 'Send',
@@ -339,6 +362,10 @@ const translations: Record<Language, Record<string, string>> = {
     switchCamera: 'Switch Camera',
     cameraAccessDenied: 'Camera access denied. Please allow camera permissions.',
     captureInvoice: 'Position the invoice in frame and tap capture',
+
+    // ── Language Selector ──────────────────────────────────────
+    invoiceLanguage: 'Invoice Language',
+    autoDetect: 'Auto Detect',
 
     // ── TEJ Withholding Tax ────────────────────────────────────
     withholdingTax: 'Withholding Tax',
@@ -587,6 +614,29 @@ const translations: Record<Language, Record<string, string>> = {
     creating: 'Création...',
     manageExport: 'Gérez et exportez vos factures avec des outils alimentés par l\'IA',
 
+    // ── Logo & Signature ───────────────────────────────────────
+    logoAndSignature: 'Logo & Signature',
+    companyLogo: 'Logo de l\'entreprise',
+    clickToUploadLogo: 'Cliquez pour télécharger le logo',
+    signature: 'Signature',
+    clickToUploadSignature: 'Cliquez pour télécharger la signature',
+    authorizedSignature: 'Signature autorisée',
+
+    // ── Share & QR Code ────────────────────────────────────────
+    shareInvoice: 'Partager la facture',
+    shareQrCode: 'Partager / Code QR',
+    shareCodeLabel: 'Code de partage',
+    shareCodeDesc: 'Toute personne sur la plateforme peut utiliser ce code pour consulter les détails de la facture',
+    shareCodeCopied: 'Code de partage copié !',
+    scanToVerify: 'Scanner pour vérifier',
+
+    // ── Invoice Lookup ─────────────────────────────────────────
+    lookupInvoice: 'Rechercher une facture',
+    lookupDesc: 'Entrez un code de partage pour voir les détails de la facture',
+    enterShareCode: 'Entrez un code de partage',
+    invoiceNotFound: 'Facture introuvable',
+    search: 'Rechercher',
+
     // ── AI Advisor ──────────────────────────────────────────────
     askAI: 'Demander au conseiller IA...',
     send: 'Envoyer',
@@ -801,6 +851,10 @@ const translations: Record<Language, Record<string, string>> = {
     switchCamera: 'Changer de caméra',
     cameraAccessDenied: "Accès à la caméra refusé. Veuillez autoriser l'accès.",
     captureInvoice: 'Positionnez la facture dans le cadre et appuyez sur capturer',
+
+    // ── Language Selector ──────────────────────────────────────
+    invoiceLanguage: 'Langue de la facture',
+    autoDetect: 'Détection auto',
 
     // ── TEJ Withholding Tax ────────────────────────────────────
     withholdingTax: 'Retenue à la Source',
@@ -1049,6 +1103,29 @@ const translations: Record<Language, Record<string, string>> = {
     creating: 'جاري الإنشاء...',
     manageExport: 'إدارة وتصدير الفواتير باستخدام أدوات الذكاء الاصطناعي',
 
+    // ── Logo & Signature ───────────────────────────────────────
+    logoAndSignature: 'الشعار والتوقيع',
+    companyLogo: 'شعار الشركة',
+    clickToUploadLogo: 'انقر لتحميل الشعار',
+    signature: 'التوقيع',
+    clickToUploadSignature: 'انقر لتحميل التوقيع',
+    authorizedSignature: 'التوقيع المعتمد',
+
+    // ── Share & QR Code ────────────────────────────────────────
+    shareInvoice: 'مشاركة الفاتورة',
+    shareQrCode: 'مشاركة / رمز QR',
+    shareCodeLabel: 'رمز المشاركة',
+    shareCodeDesc: 'يمكن لأي شخص على المنصة استخدام هذا الرمز لعرض تفاصيل الفاتورة',
+    shareCodeCopied: 'تم نسخ رمز المشاركة!',
+    scanToVerify: 'امسح للتحقق',
+
+    // ── Invoice Lookup ─────────────────────────────────────────
+    lookupInvoice: 'البحث عن فاتورة',
+    lookupDesc: 'أدخل رمز المشاركة لعرض تفاصيل الفاتورة',
+    enterShareCode: 'أدخل رمز المشاركة',
+    invoiceNotFound: 'الفاتورة غير موجودة',
+    search: 'بحث',
+
     // ── AI Advisor ──────────────────────────────────────────────
     askAI: 'اسأل مستشار الذكاء الاصطناعي...',
     send: 'إرسال',
@@ -1263,6 +1340,10 @@ const translations: Record<Language, Record<string, string>> = {
     switchCamera: 'تبديل الكاميرا',
     cameraAccessDenied: 'تم رفض الوصول إلى الكاميرا. يرجى السماح بأذونات الكاميرا.',
     captureInvoice: 'ضع الفاتورة في الإطار واضغط على التقاط',
+
+    // ── Language Selector ──────────────────────────────────────
+    invoiceLanguage: 'لغة الفاتورة',
+    autoDetect: 'كشف تلقائي',
 
     // ── TEJ Withholding Tax ────────────────────────────────────
     withholdingTax: 'الخصم من المنبع',

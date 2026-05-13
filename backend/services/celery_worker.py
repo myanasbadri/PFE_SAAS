@@ -1,8 +1,19 @@
 import os
+import string
+import secrets
 from celery import Celery
 from services.db_service import invoices_collection
 from services.extractor_core import extract_from_file, now_iso
 from services.xml_parser import is_xml_file
+
+
+def _generate_share_code(length=8):
+    """Generate a unique short share code like INV-A3X9K2B7."""
+    alphabet = string.ascii_uppercase + string.digits
+    while True:
+        code = "INV-" + "".join(secrets.choice(alphabet) for _ in range(length))
+        if not invoices_collection.find_one({"share_code": code}):
+            return code
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
@@ -14,7 +25,7 @@ celery = Celery(
 )
 
 def run_invoice_processing(user_id: str, file_path: str, original_filename: str,
-                           org_id: str = None) -> dict:
+                           org_id: str = None, lang: str = "auto") -> dict:
     """
     Core processing logic — shared between the Celery task and the synchronous fallback.
     Extracts invoice data and saves it to MongoDB.
@@ -39,6 +50,7 @@ def run_invoice_processing(user_id: str, file_path: str, original_filename: str,
         "original_filename": original_filename,
         "source_format": source_format,
         "status": "processing",
+        "share_code": _generate_share_code(),
         "data": {},
         "created_at": now_iso(),
     }
@@ -49,7 +61,7 @@ def run_invoice_processing(user_id: str, file_path: str, original_filename: str,
     invoice_id = result.inserted_id
 
     try:
-        extracted_data = extract_from_file(file_path)
+        extracted_data = extract_from_file(file_path, lang=lang)
         update_fields = {
             "data": extracted_data,
             "status": "completed",
@@ -83,10 +95,10 @@ def run_invoice_processing(user_id: str, file_path: str, original_filename: str,
 
 @celery.task(bind=True)
 def process_invoice_task(self, user_id: str, file_path: str, original_filename: str,
-                         org_id: str = None):
+                         org_id: str = None, lang: str = "auto"):
     """Celery task wrapper around run_invoice_processing."""
     try:
-        return run_invoice_processing(user_id, file_path, original_filename, org_id=org_id)
+        return run_invoice_processing(user_id, file_path, original_filename, org_id=org_id, lang=lang)
     except Exception as e:
         self.update_state(state="FAILURE", meta={"exc_type": type(e).__name__, "exc_message": str(e)})
         raise e

@@ -60,6 +60,13 @@ import {
 } from "./ui/dialog";
 import { useLanguage } from "../contexts/LanguageContext";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import {
   extractFile,
   extractBatchFiles,
   getTaskStatus,
@@ -171,6 +178,9 @@ export const AIExtraction = () => {
 
   // Mode: "single" or "batch"
   const [mode, setMode] = useState<"single" | "batch">("single");
+
+  // ── Language hint for OCR ──────────────────────────────────────────────
+  const [lang, setLang] = useState<string>("auto");
 
   // ── Single-file state ──────────────────────────────────────────────────
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -365,7 +375,7 @@ export const AIExtraction = () => {
         const stepsPromise = animateSteps();
 
         try {
-          const res = await extractFile(file);
+          const res = await extractFile(file, lang);
           await stepsPromise;
 
           let extractedData: ExtractionData | undefined;
@@ -423,7 +433,7 @@ export const AIExtraction = () => {
         }
       }
     },
-    [animateSteps],
+    [animateSteps, lang],
   );
 
   // ── Camera handlers (depend on onDrop) ─────────────────────────────
@@ -739,9 +749,9 @@ export const AIExtraction = () => {
                 )}
               </div>
 
-              {/* Camera Capture Button */}
+              {/* Camera + Language selector */}
               {!isProcessing && !batchProcessing && (
-                <div className="mt-4 flex items-center justify-center">
+                <div className="mt-4 flex items-center justify-center gap-3">
                   <Button
                     type="button"
                     variant="outline"
@@ -752,6 +762,17 @@ export const AIExtraction = () => {
                     <Camera className="h-4 w-4" />
                     {t("scanInvoice") || "Scan Invoice"}
                   </Button>
+                  <Select value={lang} onValueChange={setLang}>
+                    <SelectTrigger className="w-[160px] h-9 text-sm">
+                      <SelectValue placeholder={t("invoiceLanguage") || "Language"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{t("autoDetect") || "Auto Detect"}</SelectItem>
+                      <SelectItem value="en">{t("english") || "English"}</SelectItem>
+                      <SelectItem value="fr">{t("french") || "French"}</SelectItem>
+                      <SelectItem value="ar">{t("arabic") || "Arabic"}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 

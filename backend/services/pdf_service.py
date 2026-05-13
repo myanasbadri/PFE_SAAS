@@ -34,7 +34,7 @@ def _extract_with_pdfplumber(file_path: str) -> str:
     return "\n".join(text_parts).strip()
 
 
-def _ocr_pdf_pages(file_path: str) -> str:
+def _ocr_pdf_pages(file_path: str, lang: str = "auto") -> str:
     """Convert scanned PDF pages to images, then run Tesseract OCR."""
     try:
         from services.image_service import run_ocr
@@ -45,7 +45,7 @@ def _ocr_pdf_pages(file_path: str) -> str:
             logger.info("OCR on PDF page %d/%d…", i + 1, len(doc))
             pix = page.get_pixmap(dpi=300)
             img = Image.open(io.BytesIO(pix.tobytes("png")))
-            text = run_ocr(img)
+            text = run_ocr(img, lang=lang)
             if text:
                 parts.append(text)
         doc.close()
@@ -55,7 +55,7 @@ def _ocr_pdf_pages(file_path: str) -> str:
         return ""
 
 
-def extract_text_from_pdf(file_path: str) -> str:
+def extract_text_from_pdf(file_path: str, lang: str = "auto") -> str:
     """
     1. PyMuPDF (fast, digital PDFs)
     2. pdfplumber (fallback)
@@ -71,6 +71,6 @@ def extract_text_from_pdf(file_path: str) -> str:
 
     if len(text) < _MIN_TEXT_LENGTH:
         logger.info("Text extraction got %d chars — switching to OCR…", len(text))
-        text = _ocr_pdf_pages(file_path)
+        text = _ocr_pdf_pages(file_path, lang=lang)
 
     return text

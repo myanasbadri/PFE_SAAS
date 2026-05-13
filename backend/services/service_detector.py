@@ -41,6 +41,16 @@ _SERVICE_KEYWORDS = {
     "sécurité", "securite", "restauration", "événementiel",
     "publicité", "publicite", "traduction", "recherche",
     "honoraires", "forfait", "mission",
+    # Arabic
+    "استشارة", "خدمة", "خدمات", "صيانة", "دعم", "تدريب",
+    "تصميم", "تطوير", "تنفيذ", "تركيب", "تكوين", "ترحيل",
+    "تدقيق", "استشاري", "ورشة", "تقييم", "تحليل", "مراجعة",
+    "فحص", "اختبار", "شهادة", "استضافة", "اشتراك", "ترخيص",
+    "إدارة", "مراقبة", "تقارير", "تكامل", "تخصيص", "نشر",
+    "نقل", "توصيل", "شحن", "تأمين", "قانوني", "محاسبة",
+    "توظيف", "تنظيف", "أمن", "حراسة", "تسويق", "إعلان",
+    "تصوير", "ترجمة", "بحث", "دراسة", "مشروع",
+    "أتعاب", "مهمة", "خبرة",
 }
 
 # Goods-indicating keywords
@@ -56,6 +66,11 @@ _GOODS_KEYWORDS = {
     "marchandises", "équipement", "equipement", "matériel", "materiel",
     "fourniture", "fournitures", "accessoire", "mobilier",
     "appareil", "outil", "outils", "pièce", "piece", "lot",
+    # Arabic
+    "منتج", "منتجات", "سلعة", "سلع", "بضاعة", "بضائع",
+    "معدات", "جهاز", "أجهزة", "قطعة", "قطع غيار",
+    "مواد", "لوازم", "مستلزمات", "أثاث", "أداة", "أدوات",
+    "آلة", "وحدة", "علبة", "كرتون", "مخزون",
 }
 
 # Duration/time indicators (strong service signal)
@@ -69,6 +84,9 @@ _DURATION_PATTERNS = [
     r"\bdaily\s+rate\b", r"\btaux\s+journalier\b",
     r"\bper\s+(hour|day|month|week|year)\b",
     r"\bpar\s+(heure|jour|mois|semaine|an)\b",
+    # Arabic duration patterns
+    r"(\d+(?:\.\d+)?)\s*(ساعة|ساعات|يوم|أيام|شهر|أشهر|أسبوع|أسابيع|سنة|سنوات)",
+    r"معدل\s*(يومي|ساعي|شهري)",
 ]
 
 
@@ -87,6 +105,12 @@ def _extract_duration(text: str) -> dict | None:
                 "wk": "week", "week": "week", "weeks": "week", "semaine": "week", "semaines": "week",
                 "mo": "month", "month": "month", "months": "month", "mois": "month",
                 "yr": "year", "year": "year", "years": "year", "an": "year", "ans": "year", "année": "year",
+                # Arabic units
+                "ساعة": "hour", "ساعات": "hour",
+                "يوم": "day", "أيام": "day",
+                "أسبوع": "week", "أسابيع": "week",
+                "شهر": "month", "أشهر": "month",
+                "سنة": "year", "سنوات": "year",
             }
             unit = unit_map.get(raw_unit, raw_unit)
             return {"value": value, "unit": unit}
