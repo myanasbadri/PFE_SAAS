@@ -3,14 +3,14 @@ import json
 import logging
 import string
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from bson import ObjectId
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-from config import PORT, UPLOAD_FOLDER, ALLOWED_EXTENSIONS, OLLAMA_URL, OLLAMA_MODEL, GROQ_API_KEY, GROQ_MODEL, CORS_ORIGINS
+from config import PORT, UPLOAD_FOLDER, ALLOWED_EXTENSIONS, ANTHROPIC_API_KEY, CLAUDE_MODEL, OLLAMA_URL, OLLAMA_MODEL, CORS_ORIGINS
 from services.db_service import users_collection, invoices_collection, activity_collection, certificates_collection
 from services.auth_service import (
     hash_password,
@@ -30,25 +30,14 @@ from services.org_service import (
 from services.extractor_core import allowed_file, extract_from_file, now_iso
 from services.celery_worker import celery, process_invoice_task, run_invoice_processing
 from services.export_service import generate_single_invoice_excel, generate_all_invoices_excel
-from services.notification_service import (
-    compute_user_hmac,
-    fetch_notifications,
-    mark_notification_read,
-    mark_all_read,
-    notify_invoice_created,
-    notify_invoice_updated,
-    notify_invoice_deleted,
-    notify_status_changed,
-    notify_extraction_complete,
-    notify_extraction_failed,
-    notify_needs_review,
-    notify_batch_complete,
-    _send_email_to_admins,
-)
+## Old MagicBell notification_service is replaced by notification_system_backend.
+## notify_* helper wrappers are defined after `ns` is initialised below.
 
 app = Flask(__name__)
 cors_origins = CORS_ORIGINS.split(",") if CORS_ORIGINS != "*" else "*"
-CORS(app, origins=cors_origins, supports_credentials=True)
+CORS(app, origins=cors_origins, supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "X-Org-Id"],
+     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs("logs", exist_ok=True)
@@ -72,6 +61,40 @@ def health_check():
 from services.db_service import db
 from services.notification_system_backend import register_notification_routes, get_notification_service
 ns = register_notification_routes(app, db)
+
+# ── Notification helper wrappers (delegate to the new MongoDB-based system) ──
+def _email_to_uid(email):
+    """Resolve user email to user_id string."""
+    u = db["users"].find_one({"email": email})
+    return str(u["_id"]) if u else None
+
+def notify_invoice_created(user_email, invoice_id, vendor_name=None):
+    ns.notify_invoice_created(user_email, invoice_id, vendor_name)
+
+def notify_invoice_updated(user_email, invoice_id, vendor_name=None):
+    ns.notify_invoice_updated(user_email, invoice_id, vendor_name)
+
+def notify_invoice_deleted(user_email, invoice_id, filename=""):
+    ns.notify_invoice_deleted(user_email, invoice_id, filename)
+
+def notify_status_changed(user_email, invoice_id, new_status, vendor_name=None):
+    ns.notify_status_changed(user_email, invoice_id, new_status, vendor_name)
+
+def notify_extraction_complete(user_email, invoice_id, filename, confidence=None):
+    uid = _email_to_uid(user_email)
+    if uid:
+        ns.notify_extraction_completed(uid, invoice_id, filename, confidence or 0)
+
+def notify_extraction_failed(user_email, filename, error=""):
+    uid = _email_to_uid(user_email)
+    if uid:
+        ns.notify_extraction_failed(uid, "", filename, error)
+
+def notify_needs_review(user_email, invoice_id, vendor_name=None):
+    ns.notify_needs_review(user_email, invoice_id, vendor_name)
+
+def notify_batch_complete(user_email, total, successful, failed):
+    ns.notify_batch_complete(user_email, total, successful, failed)
 
 # ── Register organization/multi-tenant routes ───────────────────────────
 register_org_routes(app, db)
@@ -215,6 +238,12 @@ def login():
             "error": "Invalid email or password"
         }), 401
 
+    if not user.get("is_active", True):
+        return jsonify({
+            "success": False,
+            "error": "Your account has been disabled. Contact your administrator."
+        }), 403
+
     user_id = str(user["_id"])
 
     # Get user's organizations
@@ -279,6 +308,259 @@ def login():
     }), 200
 
 
+@app.route("/api/auth/google", methods=["POST"])
+def google_login():
+    """Authenticate via Google access token (from Google Identity Services)."""
+    import requests as http_requests
+
+    data = request.get_json(silent=True) or {}
+    access_token = data.get("access_token", "").strip()
+
+    if not access_token:
+        return jsonify({"success": False, "error": "Missing Google access token"}), 400
+
+    # Verify the access token by fetching user info from Google
+    try:
+        resp = http_requests.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return jsonify({"success": False, "error": "Invalid Google token"}), 401
+        idinfo = resp.json()
+    except Exception:
+        return jsonify({"success": False, "error": "Failed to verify Google token"}), 401
+
+    email = idinfo.get("email", "").lower()
+    name = idinfo.get("name", "")
+    google_sub = idinfo.get("sub", "")
+
+    if not email:
+        return jsonify({"success": False, "error": "Google account has no email"}), 400
+
+    # Check if user already exists
+    user = users_collection.find_one({"email": email})
+
+    if user:
+        # Existing user — log them in
+        if not user.get("is_active", True):
+            return jsonify({
+                "success": False,
+                "error": "Your account has been disabled. Contact your administrator."
+            }), 403
+
+        user_id = str(user["_id"])
+
+        # Link Google sub if not yet linked
+        if not user.get("google_sub"):
+            users_collection.update_one(
+                {"_id": user["_id"]},
+                {"$set": {"google_sub": google_sub}},
+            )
+    else:
+        # New user — auto-register
+        user_doc = {
+            "name": name,
+            "email": email,
+            "password": "",  # no password for Google-only users
+            "role": "client",
+            "is_active": True,
+            "google_sub": google_sub,
+            "created_at": now_iso(),
+        }
+        result = users_collection.insert_one(user_doc)
+        user_id = str(result.inserted_id)
+        user = user_doc
+        user["_id"] = result.inserted_id
+
+        # Create a personal organization
+        create_personal_org(db, user_id, name)
+
+    # Get orgs & select active org
+    orgs = get_user_orgs(db, user_id)
+
+    if not orgs:
+        new_org_id = create_personal_org(db, user_id, user.get("name", "User"))
+        if new_org_id:
+            orgs = get_user_orgs(db, user_id)
+
+    org_id = None
+    org_role = None
+    if orgs:
+        last_org = user.get("last_org_id") if isinstance(user, dict) else None
+        selected = next((o for o in orgs if o["id"] == last_org), None) or orgs[0]
+        org_id = selected["id"]
+        org_role = selected["role"]
+
+    token = create_token(user_id, email, user.get("role", "client"),
+                         org_id=org_id, org_role=org_role)
+
+    users_collection.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"last_login": now_iso()}},
+    )
+
+    activity_collection.insert_one({
+        "user_id": user_id,
+        "org_id": org_id or "",
+        "action": "login",
+        "timestamp": now_iso(),
+        "details": {"method": "google"},
+        "ip_address": request.remote_addr or "",
+    })
+
+    return jsonify({
+        "success": True,
+        "message": "Login successful",
+        "token": token,
+        "user": {
+            "id": user_id,
+            "name": user.get("name", name),
+            "email": email,
+            "role": user.get("role", "client"),
+        },
+        "orgs": orgs,
+        "current_org_id": org_id,
+    }), 200
+
+
+@app.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip().lower()
+
+    if not email:
+        return jsonify({"success": False, "error": "Email is required"}), 400
+
+    user = users_collection.find_one({"email": email})
+    if not user:
+        # Don't reveal whether email exists
+        return jsonify({"success": True, "message": "If this email is registered, a reset code has been sent."}), 200
+
+    # Generate a 6-digit reset code
+    code = "".join(secrets.choice(string.digits) for _ in range(6))
+
+    users_collection.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "reset_code": code,
+            "reset_code_expires": (datetime.utcnow() + timedelta(minutes=15)).isoformat(),
+        }},
+    )
+
+    # Send reset code via email
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from config import SMTP_EMAIL, SMTP_PASSWORD, SMTP_HOST, SMTP_PORT
+
+        if SMTP_EMAIL and SMTP_PASSWORD:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = "SmartInvoice AI - Password Reset Code"
+            msg["From"] = SMTP_EMAIL
+            msg["To"] = email
+
+            user_name = user.get("name", "User")
+
+            text_body = (
+                f"Hi {user_name},\n\n"
+                f"Your password reset code is: {code}\n\n"
+                f"This code will expire in 15 minutes.\n"
+                f"If you did not request this, please ignore this email.\n\n"
+                f"— SmartInvoice AI"
+            )
+
+            html_body = f"""
+            <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+              <h2 style="color:#1a1a2e;margin-bottom:8px;">Password Reset</h2>
+              <p style="color:#555;">Hi <strong>{user_name}</strong>,</p>
+              <p style="color:#555;">Use the code below to reset your password:</p>
+              <div style="text-align:center;margin:24px 0;">
+                <span style="display:inline-block;font-size:32px;letter-spacing:8px;font-weight:bold;
+                             background:#f4f4f8;padding:16px 32px;border-radius:12px;color:#1a1a2e;">
+                  {code}
+                </span>
+              </div>
+              <p style="color:#888;font-size:13px;">This code expires in 15 minutes.
+              If you did not request a password reset, you can safely ignore this email.</p>
+              <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+              <p style="color:#aaa;font-size:12px;text-align:center;">SmartInvoice AI</p>
+            </div>
+            """
+
+            msg.attach(MIMEText(text_body, "plain"))
+            msg.attach(MIMEText(html_body, "html"))
+
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+                server.starttls()
+                server.login(SMTP_EMAIL, SMTP_PASSWORD)
+                server.sendmail(SMTP_EMAIL, email, msg.as_string())
+
+            app.logger.info(f"Password reset email sent to {email}")
+        else:
+            app.logger.warning(f"SMTP not configured. Reset code for {email}: {code}")
+    except Exception as e:
+        app.logger.error(f"Failed to send reset email to {email}: {e}")
+
+    return jsonify({
+        "success": True,
+        "message": "If this email is registered, a reset code has been sent.",
+    }), 200
+
+
+@app.route("/api/auth/reset-password", methods=["POST"])
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip().lower()
+    code = data.get("code", "").strip()
+    new_password = data.get("new_password", "").strip()
+
+    if not email or not code or not new_password:
+        return jsonify({"success": False, "error": "Email, code, and new password are required"}), 400
+
+    if len(new_password) < 6:
+        return jsonify({"success": False, "error": "Password must be at least 6 characters"}), 400
+
+    user = users_collection.find_one({"email": email})
+    if not user:
+        return jsonify({"success": False, "error": "Invalid email or code"}), 400
+
+    stored_code = user.get("reset_code")
+    expires = user.get("reset_code_expires")
+
+    if not stored_code or stored_code != code:
+        return jsonify({"success": False, "error": "Invalid or expired reset code"}), 400
+
+    if expires:
+        try:
+            exp_dt = datetime.fromisoformat(expires)
+            if datetime.utcnow() > exp_dt:
+                return jsonify({"success": False, "error": "Reset code has expired. Please request a new one."}), 400
+        except (ValueError, TypeError):
+            pass
+
+    users_collection.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {"password": hash_password(new_password)},
+            "$unset": {"reset_code": "", "reset_code_expires": ""},
+        },
+    )
+
+    activity_collection.insert_one({
+        "user_id": str(user["_id"]),
+        "org_id": "",
+        "action": "password_reset",
+        "timestamp": now_iso(),
+        "details": {"email": email},
+        "ip_address": request.remote_addr or "",
+    })
+
+    return jsonify({"success": True, "message": "Password has been reset successfully."}), 200
+
+
 @app.route("/api/auth/me", methods=["GET"])
 @token_required
 def me():
@@ -311,80 +593,14 @@ def me():
     }), 200
 
 
-@app.route("/api/notifications/auth", methods=["GET"])
-@token_required
-def notifications_auth():
-    """Return Base64 HMAC + API key for MagicBell client-side auth."""
-    from config import MAGICBELL_API_KEY
-    user_email = g.user.get("email", "")
-    return jsonify({
-        "success": True,
-        "apiKey": MAGICBELL_API_KEY,
-        "userEmail": user_email,
-        "userKey": compute_user_hmac(user_email),
-    }), 200
-
-
-@app.route("/api/notifications/test", methods=["POST"])
-@token_required
-def test_notification():
-    """Send a test notification to the current user."""
-    from services.notification_service import _send_notification
-    user_email = g.user.get("email", "")
-    _send_notification(
-        title="Test Notification",
-        content="If you see this, your MagicBell notifications are working!",
-        recipients=[{"email": user_email}],
-        category="default",
-    )
-    return jsonify({"success": True, "message": f"Test notification sent to {user_email}"}), 200
-
-
-@app.route("/api/notifications/test-email", methods=["POST"])
-@token_required
-def test_email_notification():
-    """Send a test email notification to all admin users."""
-    _send_email_to_admins(
-        title="Test Email Notification",
-        content="If you receive this email, the email notification system is working correctly!",
-    )
-    return jsonify({"success": True, "message": "Test email sent to all admin users"}), 200
-
-
-@app.route("/api/notifications", methods=["GET"])
-@token_required
-def get_notifications():
-    """Fetch notifications for the current user from MagicBell."""
-    page = request.args.get("page", 1, type=int)
-    data = fetch_notifications(g.user["email"], page=page)
-    if data is None:
-        return jsonify({"success": False, "error": "Failed to fetch notifications"}), 502
-    return jsonify({"success": True, **data}), 200
-
-
-@app.route("/api/notifications/<notification_id>/read", methods=["POST"])
-@token_required
-def read_notification(notification_id):
-    """Mark a notification as read."""
-    ok = mark_notification_read(g.user["email"], notification_id)
-    if not ok:
-        return jsonify({"success": False, "error": "Failed to mark as read"}), 502
-    return jsonify({"success": True}), 200
-
-
-@app.route("/api/notifications/mark-all-read", methods=["POST"])
-@token_required
-def read_all_notifications():
-    """Mark all notifications as read."""
-    ok = mark_all_read(g.user["email"])
-    if not ok:
-        return jsonify({"success": False, "error": "Failed to mark all read"}), 502
-    return jsonify({"success": True}), 200
+## Old MagicBell notification routes removed — now handled by notification_bp blueprint
+## (registered via register_notification_routes above)
 
 
 @app.route("/api/extract-file", methods=["POST"])
 @token_required
 @org_required
+@check_plan_limit("invoices")
 def extract_file():
     if "file" not in request.files:
         return jsonify({
@@ -416,7 +632,7 @@ def extract_file():
     # Language hint for OCR (auto, en, fr, ar, en+fr, etc.)
     lang = request.form.get("lang", "auto").strip().lower() or "auto"
 
-    # Try async via Celery/Redis first; fall back to synchronous if Redis is unavailable
+    # Try async via Celery/Redis first; fall back to background thread if Redis is unavailable
     try:
         task = process_invoice_task.delay(g.user["user_id"], file_path, filename, g.org["org_id"], lang)
         return jsonify({
@@ -426,24 +642,88 @@ def extract_file():
             "task_id": task.id
         }), 202
     except Exception:
-        # Redis not running — process synchronously so testing still works
-        result = run_invoice_processing(g.user["user_id"], file_path, filename, org_id=g.org["org_id"], lang=lang)
-        inv_id = result.get("invoice_id", "")
-        ext_data = result.get("extracted_data", {})
-        confidence = ext_data.get("validation", {}).get("confidence")
-        needs_review = ext_data.get("validation", {}).get("needs_human_review", False)
+        import threading
+        from services.celery_worker import _generate_share_code
+        from services.xml_parser import is_xml_file
 
-        notify_extraction_complete(g.user["email"], inv_id, filename, confidence)
-        if needs_review:
-            notify_needs_review(g.user["email"], inv_id, ext_data.get("vendor_name"))
+        # Capture request context before thread starts
+        user_id = g.user["user_id"]
+        user_email = g.user["email"]
+        org_id = g.org["org_id"]
+
+        # Check for XML
+        source_format = os.path.splitext(file_path)[1].lstrip(".").lower()
+        raw_xml = None
+        if is_xml_file(filename):
+            source_format = "xml"
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    raw_xml = f.read()
+            except Exception:
+                pass
+
+        # Create invoice doc immediately with status "processing"
+        invoice_doc = {
+            "user_id": user_id,
+            "org_id": org_id,
+            "filename": final_filename,
+            "original_filename": filename,
+            "source_format": source_format,
+            "status": "processing",
+            "share_code": _generate_share_code(),
+            "data": {},
+            "created_at": now_iso(),
+        }
+        if raw_xml:
+            invoice_doc["raw_xml"] = raw_xml
+
+        insert_result = invoices_collection.insert_one(invoice_doc)
+        inv_id = str(insert_result.inserted_id)
+
+        # Process extraction in a background thread so the HTTP response returns instantly
+        def _background_extract():
+            try:
+                extracted_data = extract_from_file(file_path, lang=lang)
+                update_fields = {
+                    "data": extracted_data,
+                    "status": "completed",
+                    "updated_at": now_iso(),
+                    "source_format": extracted_data.get("source_format", source_format),
+                }
+                if extracted_data.get("invoice_category"):
+                    update_fields["invoice_category"] = extracted_data["invoice_category"]
+                if extracted_data.get("compliance"):
+                    update_fields["compliance_status"] = (
+                        "compliant" if extracted_data["compliance"].get("is_compliant") else "non_compliant"
+                    )
+                invoices_collection.update_one(
+                    {"_id": insert_result.inserted_id},
+                    {"$set": update_fields},
+                )
+                confidence = extracted_data.get("validation", {}).get("confidence")
+                needs_review = extracted_data.get("validation", {}).get("needs_human_review", False)
+                notify_extraction_complete(user_email, inv_id, filename, confidence)
+                if needs_review:
+                    notify_needs_review(user_email, inv_id, extracted_data.get("vendor_name"))
+            except Exception as exc:
+                logging.error("Background extraction failed for %s: %s", filename, exc)
+                invoices_collection.update_one(
+                    {"_id": insert_result.inserted_id},
+                    {"$set": {"status": "failed", "updated_at": now_iso()}},
+                )
+                try:
+                    notify_extraction_failed(user_email, filename, str(exc))
+                except Exception:
+                    pass
+
+        threading.Thread(target=_background_extract, daemon=True).start()
 
         return jsonify({
             "success": True,
-            "message": "File processed synchronously (Redis unavailable)",
-            "mode": "sync",
+            "message": "File processing started in background",
+            "mode": "poll",
             "invoice_id": inv_id,
-            "extracted_data": ext_data
-        }), 200
+        }), 202
 
 @app.route("/api/tasks/<task_id>", methods=["GET"])
 @token_required
@@ -470,6 +750,7 @@ def get_task_status(task_id):
 @app.route("/api/extract-batch", methods=["POST"])
 @token_required
 @org_required
+@check_plan_limit("invoices")
 def extract_batch():
     """Accept multiple files (and/or ZIP archives) and process each one."""
     import zipfile
@@ -861,6 +1142,35 @@ def get_invoice_by_id(invoice_id):
             "success": False,
             "error": "Invalid invoice id"
         }), 400
+
+
+@app.route("/api/invoices/<invoice_id>/file", methods=["GET"])
+@token_required
+@org_required
+def get_invoice_file(invoice_id):
+    """Serve the original uploaded file for an invoice."""
+    try:
+        doc = invoices_collection.find_one({"_id": ObjectId(invoice_id)})
+        if not doc:
+            return jsonify({"success": False, "error": "Invoice not found"}), 404
+
+        if doc.get("org_id") != g.org["org_id"]:
+            return jsonify({"success": False, "error": "Access denied"}), 403
+
+        stored_filename = doc.get("filename")
+        if not stored_filename or stored_filename in ("manual_entry", "imported"):
+            return jsonify({"success": False, "error": "No file available for this invoice"}), 404
+
+        file_path = os.path.join(UPLOAD_FOLDER, stored_filename)
+        if not os.path.isfile(file_path):
+            return jsonify({"success": False, "error": "File not found on server"}), 404
+
+        from flask import send_file
+        original_name = doc.get("original_filename", stored_filename)
+        return send_file(file_path, download_name=original_name, as_attachment=False)
+
+    except Exception:
+        return jsonify({"success": False, "error": "Invalid invoice id"}), 400
 
 
 @app.route("/api/invoices/<invoice_id>", methods=["PUT"])
@@ -1880,6 +2190,32 @@ Response style — VERY IMPORTANT:
 """
 
 
+def _chat_with_claude(messages: list) -> str:
+    """Send chat messages to Claude API and return the response."""
+    from services.extractor_core import _get_anthropic_client
+    client = _get_anthropic_client()
+    if client is None:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+
+    # Separate system message from conversation messages
+    system_text = ""
+    chat_messages = []
+    for msg in messages:
+        if msg["role"] == "system":
+            system_text = msg["content"]
+        else:
+            chat_messages.append(msg)
+
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1024,
+        temperature=0.7,
+        system=system_text,
+        messages=chat_messages,
+    )
+    return response.content[0].text
+
+
 def _chat_with_ollama(messages: list) -> str:
     """Send chat messages to Ollama and return the response."""
     import requests
@@ -1894,25 +2230,10 @@ def _chat_with_ollama(messages: list) -> str:
     return response.json()["message"]["content"]
 
 
-def _chat_with_groq(messages: list) -> str:
-    """Send chat messages to Groq and return the response."""
-    from services.extractor_core import _get_groq_client
-    client = _get_groq_client()
-    if client is None:
-        raise RuntimeError("GROQ_API_KEY not configured")
-
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=messages,
-        temperature=0.7,
-        max_tokens=1024,
-    )
-    return response.choices[0].message.content
-
-
 @app.route("/api/advisor/chat", methods=["POST"])
 @token_required
 @org_required
+@check_plan_limit("ai_queries")
 def advisor_chat():
     body = request.get_json(silent=True) or {}
     message = body.get("message", "").strip()
@@ -1936,26 +2257,26 @@ def advisor_chat():
 
         messages.append({"role": "user", "content": message})
 
-        # Try Ollama first, then Groq
+        # Try Claude first, then Ollama
         reply = None
         model_used = None
         errors = []
 
         try:
-            _advisor_logger.info("Advisor chat via Ollama (%s)", OLLAMA_MODEL)
-            reply = _chat_with_ollama(messages)
-            model_used = OLLAMA_MODEL
+            _advisor_logger.info("Advisor chat via Claude (%s)", CLAUDE_MODEL)
+            reply = _chat_with_claude(messages)
+            model_used = CLAUDE_MODEL
         except Exception as e:
-            errors.append(f"Ollama: {e}")
-            _advisor_logger.warning("Ollama failed for advisor: %s, trying Groq...", e)
+            errors.append(f"Claude: {e}")
+            _advisor_logger.warning("Claude failed for advisor: %s, trying Ollama...", e)
 
         if reply is None:
             try:
-                _advisor_logger.info("Advisor chat via Groq (%s)", GROQ_MODEL)
-                reply = _chat_with_groq(messages)
-                model_used = GROQ_MODEL
+                _advisor_logger.info("Advisor chat via Ollama (%s)", OLLAMA_MODEL)
+                reply = _chat_with_ollama(messages)
+                model_used = OLLAMA_MODEL
             except Exception as e:
-                errors.append(f"Groq: {e}")
+                errors.append(f"Ollama: {e}")
                 _advisor_logger.error("All LLMs failed for advisor: %s", errors)
 
         if reply is None:
@@ -1964,6 +2285,9 @@ def advisor_chat():
                 "error": "AI service is currently unavailable. Please try again later.",
                 "details": errors,
             }), 503
+
+        # Increment AI queries usage
+        increment_usage(db, g.org["org_id"], "ai_queries")
 
         # Log the advisor interaction
         activity_collection.insert_one({
@@ -1995,20 +2319,19 @@ def debug_llm():
     if not text:
         return jsonify({"success": False, "error": "Provide a 'text' field"}), 400
 
-    from services.extractor_core import _extract_with_ollama, _extract_with_groq
-    from config import OLLAMA_MODEL, GROQ_MODEL
+    from services.extractor_core import _extract_with_claude, _extract_with_ollama
 
     results = {}
+
+    try:
+        results["claude"] = {"status": "ok", "data": _extract_with_claude(text)}
+    except Exception as e:
+        results["claude"] = {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
     try:
         results["ollama"] = {"status": "ok", "data": _extract_with_ollama(text)}
     except Exception as e:
         results["ollama"] = {"status": "error", "error": f"{type(e).__name__}: {e}"}
-
-    try:
-        results["groq"] = {"status": "ok", "data": _extract_with_groq(text)}
-    except Exception as e:
-        results["groq"] = {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
     return jsonify({"success": True, "models_tested": results}), 200
 

@@ -1,0 +1,132 @@
+@startuml Diagramme_Sequence_Conseiller_IA
+title Diagramme de séquence — Conseiller financier IA
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  database "MongoDB" as db #F3E5F5
+end box
+
+box "Services IA" #FFF3E0
+  participant "API Claude\n(Anthropic)" as claude #FFCC80
+  participant "Ollama\n(Local)" as ollama #FFAB91
+end box
+
+note over front
+  **Composant : AIAdvisor**
+  ────────────────────────
+  • Interface de chat conversationnel
+  • Suggestions de questions prédéfinies
+  • Historique local de la conversation
+  • Badge du modèle utilisé (Claude/Ollama)
+end note
+
+user -> front : Poser une question\n(texte libre ou suggestion\nprédéfinie)
+activate front
+
+note right of front
+  Questions suggérées :
+  • Tendances de dépenses
+  • Principaux fournisseurs
+  • Optimisation des coûts
+  • Factures à vérifier
+  • Résumé mensuel
+  • Santé financière
+end note
+
+front -> front : Ajouter le message utilisateur\nà l'historique de chat\n(affichage immédiat)
+
+front -> front : Afficher l'indicateur\nde chargement (« ... »)
+
+front -> api : **POST /api/advisor/chat**\nHeaders : Authorization, X-Org-Id\n{ message, history[] }
+activate api
+
+api -> api : @token_required\n@org_required\n@check_plan_limit("ai_queries")
+
+== Phase 1 : Construction du contexte ==
+
+api -> db : Récupérer les 200 dernières\nfactures de l'organisation\ninvoices.find({ org_id })\n.sort(created_at, -1).limit(200)
+activate db
+db --> api : Liste des factures
+deactivate db
+
+api -> api : **_build_user_data_context()**\nAgréger les données :
+
+note right of api
+  Contexte injecté :
+  ──────────────────
+  • Nombre total de factures
+  • Montant total des dépenses
+  • Factures à vérifier
+  • Top 10 fournisseurs
+  • Répartition par statut
+  • Devises utilisées
+  • Tendances mensuelles (6 mois)
+  • 20 factures récentes (résumé)
+end note
+
+api -> api : Assembler le prompt système\n+ historique (20 derniers\nmessages) + question
+
+== Phase 2 : Appel au modèle de langage ==
+
+api -> claude : **messages.create(**\n  model: claude-sonnet,\n  max_tokens: 1024,\n  temperature: 0.7,\n  system: prompt_avec_contexte,\n  messages: historique\n**)**
+activate claude
+
+alt Claude répond
+  claude --> api : Réponse textuelle
+  deactivate claude
+  api -> api : model = "claude-sonnet"
+else Claude indisponible (timeout / quota / erreur)
+  claude --> api : Erreur
+  deactivate claude
+
+  api -> ollama : **POST /api/chat**\n{ model, messages,\n  stream: false,\n  options: { temperature: 0.7,\n    num_predict: 1024 } }
+  activate ollama
+
+  alt Ollama répond
+    ollama --> api : Réponse textuelle
+    deactivate ollama
+    api -> api : model = "ollama_model"
+  else Ollama indisponible
+    ollama --> api : Erreur
+    deactivate ollama
+    api --> front : **503 Service Unavailable**\n{ error: "All AI models\nunavailable" }
+    front -> front : Masquer l'indicateur\nde chargement
+    front --> user : Afficher message d'erreur\n« Service IA temporairement\nindisponible »
+  end
+end
+
+== Phase 3 : Enregistrement et réponse ==
+
+api -> db : Incrémenter le compteur\nd'utilisation (ai_queries)
+activate db
+db --> api : OK
+deactivate db
+
+api -> db : **activity.insert_one(**\n  { action: "advisor_chat",\n    details: { question_length,\n      model } }\n**)**
+activate db
+db --> api : OK
+deactivate db
+
+api --> front : **200 OK**\n{ reply, model }
+deactivate api
+
+front -> front : Masquer l'indicateur\nde chargement
+
+front -> front : Ajouter la réponse\nà l'historique de chat\navec horodatage et badge modèle
+
+front --> user : Afficher la réponse\ndu conseiller IA\n(avec badge Claude ou Ollama)
+
+deactivate front
+
+@enduml

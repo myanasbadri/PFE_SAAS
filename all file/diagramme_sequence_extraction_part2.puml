@@ -1,0 +1,92 @@
+@startuml Diagramme_Sequence_Extraction_Part2
+title Diagramme de séquence — Extraction intelligente (2/2) : Post-traitement et résultats
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "Worker\n(Celery / Thread)" as worker #FFF9C4
+  participant "Extractor\nCore" as extractor #FFE0B2
+  database "MongoDB" as db #F3E5F5
+end box
+
+note over front, extractor
+  **Suite du diagramme Extraction (1/2)** — Données brutes extraites par le moteur IA
+end note
+
+== Phase 4 : Post-traitement ==
+
+activate worker
+
+worker -> extractor : Données brutes extraites
+activate extractor
+
+extractor -> extractor : Post-traitement :\n• Normaliser les dates\n• Corriger les quantités\n• Fusionner les doublons\n• Calculer les scores\n  de confiance par champ
+
+extractor -> extractor : **validate_invoice()**\nMoteur de conformité\n(7 familles de contrôles)
+
+extractor -> extractor : **detect_service_type()**\nClassification biens/services
+
+extractor -> extractor : Déterminer si vérification\nhumaine nécessaire\n(needs_human_review)
+
+extractor --> worker : Données extraites +\ncompliance + scores
+deactivate extractor
+
+== Phase 5 : Persistance et notification ==
+
+worker -> db : **invoices.update_one(**\n  { $set: { data, status:\n    "completed",\n    compliance_status,\n    invoice_category } }\n**)**
+activate db
+db --> worker : OK
+deactivate db
+
+worker -> db : Incrémenter le compteur\nd'utilisation (increment_usage)
+activate db
+db --> worker : OK
+deactivate db
+
+worker -> db : **activity.insert_one(**\n  { action: "upload",\n    details: { invoice_id,\n      model_used, filename } }\n**)**
+activate db
+db --> worker : OK
+deactivate db
+
+worker -> worker : **Notification**\nextraction_complete\nou needs_review
+
+deactivate worker
+
+== Phase 6 : Récupération du résultat ==
+
+activate front
+
+front -> api : **GET /api/tasks/{task_id}**\nou polling par invoice_id
+activate api
+api --> front : **200 OK**\n{ state: "SUCCESS",\n  result: extracted_data }
+deactivate api
+
+front -> front : Masquer la barre\nde progression
+front --> user : Afficher les résultats\navec les scores de confiance\net le statut de conformité
+
+note right of front
+  **Interface : Résultats**
+  ────────────────────────
+  • Données extraites affichées
+  • Scores de confiance par champ
+    (couleurs : vert/orange/rouge)
+  • Statut de conformité
+  • Badge modèle utilisé
+    (Claude Vision / Ollama)
+  • Bouton « Vérifier » si
+    needs_human_review = true
+end note
+
+deactivate front
+
+@enduml

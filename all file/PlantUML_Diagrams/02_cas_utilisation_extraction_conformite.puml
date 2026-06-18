@@ -1,0 +1,109 @@
+@startuml
+' ============================================================
+'  Figure 2.2 -- Cas d Utilisation : Extraction et Conformite
+'  Diagramme raffine avec relations include
+' ============================================================
+
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam handwritten false
+skinparam shadowing true
+skinparam dpi 200
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 14
+skinparam ranksep 50
+skinparam nodesep 30
+
+skinparam usecase {
+    BackgroundColor #DCEEFB
+    BorderColor #2E75B6
+    BorderThickness 2
+    FontColor #0A2540
+    FontSize 13
+    FontStyle plain
+}
+
+skinparam actor {
+    BackgroundColor #2E75B6
+    BorderColor #0A2540
+    FontColor #0A2540
+    FontSize 14
+    FontStyle bold
+}
+
+skinparam rectangle {
+    BackgroundColor #F5F9FF
+    BorderColor #2E75B6
+    BorderThickness 2.5
+    FontColor #1A5276
+    FontSize 16
+    FontStyle bold
+    RoundCorner 15
+}
+
+skinparam arrow {
+    Color #2C3E50
+    FontColor #2E75B6
+    FontSize 12
+    Thickness 1.5
+}
+
+skinparam legend {
+    BackgroundColor #F5F9FF
+    BorderColor #2E75B6
+    FontSize 12
+}
+
+title <size:22><b>Cas d'Utilisation -- Extraction et Conformite</b></size>\n<size:14><color:#2E75B6>Diagramme raffine avec relations <<include>></color></size>
+
+' --- Acteurs ---
+actor "Client" as client
+actor "Moteur IA\n(Claude Vision / Ollama)" as ia
+
+' --- Module ---
+rectangle "  Module Extraction & Conformite  " {
+
+    ' -- Niveau 1 : Actions principales du Client --
+    usecase "Uploader\ndes factures" as UC_upload
+    usecase "Extraire\nles donnees" as UC_extract
+
+    ' -- Niveau 2 : Sous-traitements inclus --
+    usecase "Detecter le\ntype de fichier" as UC_detect
+    usecase "Scorer la\nconfiance" as UC_score
+    usecase "Classifier\nbiens / services" as UC_classify
+
+    ' -- Niveau 3 : Conformite --
+    usecase "Valider la\nconformite" as UC_validate
+    usecase "Verifier la\nsignature XML" as UC_signature
+
+    ' -- Niveau 4 : Actions finales --
+    usecase "Verifier / corriger\n(revue humaine)" as UC_verify
+    usecase "Soumettre a\nTTN El Fatoora" as UC_submit
+}
+
+' === Relations Client ===
+client -- UC_upload
+client -- UC_extract
+client -- UC_validate
+client -- UC_verify
+client -- UC_submit
+
+' === Relations Moteur IA ===
+ia -- UC_detect
+ia -- UC_extract
+ia -- UC_score
+
+' === Relations <<include>> ===
+UC_extract ..> UC_detect : <<include>>
+UC_extract ..> UC_score : <<include>>
+UC_extract ..> UC_classify : <<include>>
+UC_validate ..> UC_signature : <<include>>
+
+' === Disposition ===
+UC_upload -[hidden]right- UC_extract
+UC_detect -[hidden]right- UC_score
+UC_score -[hidden]right- UC_classify
+UC_validate -[hidden]right- UC_signature
+UC_verify -[hidden]right- UC_submit
+
+@enduml

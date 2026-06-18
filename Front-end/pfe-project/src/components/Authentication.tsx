@@ -15,7 +15,9 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import { ApiError } from '@/lib/api';
+import { ApiError, forgotPassword, resetPassword } from '@/lib/api';
+import { useGoogleLogin } from '@react-oauth/google';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
 interface AuthenticationProps {
   onAuthenticated: () => void;
@@ -36,11 +38,69 @@ const PERSON_TYPES = [
   { value: "moral",    labelKey: "regMoral",    descKey: "regMoralDesc",    Icon: Building2 },
 ] as const;
 
+/* ── Country dial codes with flag emojis ─────────────────────── */
+const COUNTRIES = [
+  { code: "+216", flag: "\u{1F1F9}\u{1F1F3}", name: "Tunisia" },
+  { code: "+213", flag: "\u{1F1E9}\u{1F1FF}", name: "Algeria" },
+  { code: "+212", flag: "\u{1F1F2}\u{1F1E6}", name: "Morocco" },
+  { code: "+218", flag: "\u{1F1F1}\u{1F1FE}", name: "Libya" },
+  { code: "+20",  flag: "\u{1F1EA}\u{1F1EC}", name: "Egypt" },
+  { code: "+966", flag: "\u{1F1F8}\u{1F1E6}", name: "Saudi Arabia" },
+  { code: "+971", flag: "\u{1F1E6}\u{1F1EA}", name: "UAE" },
+  { code: "+974", flag: "\u{1F1F6}\u{1F1E6}", name: "Qatar" },
+  { code: "+973", flag: "\u{1F1E7}\u{1F1ED}", name: "Bahrain" },
+  { code: "+968", flag: "\u{1F1F4}\u{1F1F2}", name: "Oman" },
+  { code: "+965", flag: "\u{1F1F0}\u{1F1FC}", name: "Kuwait" },
+  { code: "+962", flag: "\u{1F1EF}\u{1F1F4}", name: "Jordan" },
+  { code: "+961", flag: "\u{1F1F1}\u{1F1E7}", name: "Lebanon" },
+  { code: "+964", flag: "\u{1F1EE}\u{1F1F6}", name: "Iraq" },
+  { code: "+963", flag: "\u{1F1F8}\u{1F1FE}", name: "Syria" },
+  { code: "+970", flag: "\u{1F1F5}\u{1F1F8}", name: "Palestine" },
+  { code: "+249", flag: "\u{1F1F8}\u{1F1E9}", name: "Sudan" },
+  { code: "+33",  flag: "\u{1F1EB}\u{1F1F7}", name: "France" },
+  { code: "+49",  flag: "\u{1F1E9}\u{1F1EA}", name: "Germany" },
+  { code: "+44",  flag: "\u{1F1EC}\u{1F1E7}", name: "United Kingdom" },
+  { code: "+39",  flag: "\u{1F1EE}\u{1F1F9}", name: "Italy" },
+  { code: "+34",  flag: "\u{1F1EA}\u{1F1F8}", name: "Spain" },
+  { code: "+31",  flag: "\u{1F1F3}\u{1F1F1}", name: "Netherlands" },
+  { code: "+32",  flag: "\u{1F1E7}\u{1F1EA}", name: "Belgium" },
+  { code: "+41",  flag: "\u{1F1E8}\u{1F1ED}", name: "Switzerland" },
+  { code: "+46",  flag: "\u{1F1F8}\u{1F1EA}", name: "Sweden" },
+  { code: "+47",  flag: "\u{1F1F3}\u{1F1F4}", name: "Norway" },
+  { code: "+45",  flag: "\u{1F1E9}\u{1F1F0}", name: "Denmark" },
+  { code: "+48",  flag: "\u{1F1F5}\u{1F1F1}", name: "Poland" },
+  { code: "+351", flag: "\u{1F1F5}\u{1F1F9}", name: "Portugal" },
+  { code: "+30",  flag: "\u{1F1EC}\u{1F1F7}", name: "Greece" },
+  { code: "+90",  flag: "\u{1F1F9}\u{1F1F7}", name: "Turkey" },
+  { code: "+1",   flag: "\u{1F1FA}\u{1F1F8}", name: "United States" },
+  { code: "+1",   flag: "\u{1F1E8}\u{1F1E6}", name: "Canada" },
+  { code: "+52",  flag: "\u{1F1F2}\u{1F1FD}", name: "Mexico" },
+  { code: "+55",  flag: "\u{1F1E7}\u{1F1F7}", name: "Brazil" },
+  { code: "+54",  flag: "\u{1F1E6}\u{1F1F7}", name: "Argentina" },
+  { code: "+86",  flag: "\u{1F1E8}\u{1F1F3}", name: "China" },
+  { code: "+81",  flag: "\u{1F1EF}\u{1F1F5}", name: "Japan" },
+  { code: "+82",  flag: "\u{1F1F0}\u{1F1F7}", name: "South Korea" },
+  { code: "+91",  flag: "\u{1F1EE}\u{1F1F3}", name: "India" },
+  { code: "+92",  flag: "\u{1F1F5}\u{1F1F0}", name: "Pakistan" },
+  { code: "+62",  flag: "\u{1F1EE}\u{1F1E9}", name: "Indonesia" },
+  { code: "+60",  flag: "\u{1F1F2}\u{1F1FE}", name: "Malaysia" },
+  { code: "+65",  flag: "\u{1F1F8}\u{1F1EC}", name: "Singapore" },
+  { code: "+66",  flag: "\u{1F1F9}\u{1F1ED}", name: "Thailand" },
+  { code: "+84",  flag: "\u{1F1FB}\u{1F1F3}", name: "Vietnam" },
+  { code: "+234", flag: "\u{1F1F3}\u{1F1EC}", name: "Nigeria" },
+  { code: "+27",  flag: "\u{1F1FF}\u{1F1E6}", name: "South Africa" },
+  { code: "+254", flag: "\u{1F1F0}\u{1F1EA}", name: "Kenya" },
+  { code: "+61",  flag: "\u{1F1E6}\u{1F1FA}", name: "Australia" },
+  { code: "+64",  flag: "\u{1F1F3}\u{1F1FF}", name: "New Zealand" },
+  { code: "+7",   flag: "\u{1F1F7}\u{1F1FA}", name: "Russia" },
+  { code: "+380", flag: "\u{1F1FA}\u{1F1E6}", name: "Ukraine" },
+] as const;
+
 const TOTAL_STEPS = 5;
 
 export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
   const { language, setLanguage, t } = useLanguage();
-  const { login, register } = useAuth();
+  const { login, googleLogin, register } = useAuth();
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -55,12 +115,23 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
   const [personType, setPersonType] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [taxId, setTaxId] = useState('');
+  const [countryCode, setCountryCode] = useState('+216');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [signUpName, setSignUpName] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
+
+  // Forgot Password State
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotStep, setForgotStep] = useState<'email' | 'code'>('email');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,21 +144,96 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError('Unable to connect to server. Make sure the backend is running.');
+        setError(t('regConnectionError'));
       }
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleForgotOpen = () => {
+    setForgotEmail(signInEmail);
+    setResetCode('');
+    setNewPassword('');
+    setForgotError('');
+    setForgotSuccess('');
+    setForgotStep('email');
+    setForgotOpen(true);
+  };
+
+  const handleSendResetCode = async () => {
+    setForgotError('');
+    if (!forgotEmail.trim()) return;
+    setForgotLoading(true);
+    try {
+      await forgotPassword(forgotEmail.trim());
+      setForgotStep('code');
+      setForgotSuccess(t('regResetCodeSent'));
+    } catch (err) {
+      if (err instanceof ApiError) setForgotError(err.message);
+      else setForgotError(t('regConnectionError'));
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setForgotError('');
+    setForgotSuccess('');
+    if (!resetCode.trim() || !newPassword.trim()) return;
+    if (newPassword.length < 6) {
+      setForgotError(t('regPasswordTooShort'));
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      await resetPassword(forgotEmail.trim(), resetCode.trim(), newPassword);
+      setForgotSuccess(t('regResetSuccess'));
+      setTimeout(() => setForgotOpen(false), 2000);
+    } catch (err) {
+      if (err instanceof ApiError) setForgotError(err.message);
+      else setForgotError(t('regConnectionError'));
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (accessToken: string) => {
+    setError('');
+    setIsLoading(true);
+    try {
+      await googleLogin(accessToken);
+      setTimeout(() => onAuthenticated(), 100);
+    } catch (err) {
+      console.error('Google login error:', err);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError(String(err));
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const triggerGoogleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      handleGoogleSuccess(tokenResponse.access_token);
+    },
+    onError: () => {
+      setError(t('regConnectionError'));
+    },
+    flow: 'implicit',
+  });
+
   const handleSignUp = async () => {
     setError('');
     if (signUpPassword !== signUpConfirmPassword) {
-      setError('Passwords do not match!');
+      setError(t('regPasswordsMismatch'));
       return;
     }
     if (signUpPassword.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError(t('regPasswordTooShort'));
       return;
     }
     setIsLoading(true);
@@ -101,7 +247,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
         person_type: personType,
         company_name: companyName,
         tax_id: taxId,
-        phone,
+        phone: phone ? `${countryCode} ${phone}` : '',
         address,
       });
       onAuthenticated();
@@ -109,7 +255,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError('Unable to connect to server. Make sure the backend is running.');
+        setError(t('regConnectionError'));
       }
     } finally {
       setIsLoading(false);
@@ -131,11 +277,11 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
     setError('');
     if (wizardStep === 3) {
       if (signUpPassword !== signUpConfirmPassword) {
-        setError('Passwords do not match!');
+        setError(t('regPasswordsMismatch'));
         return;
       }
       if (signUpPassword.length < 6) {
-        setError('Password must be at least 6 characters.');
+        setError(t('regPasswordTooShort'));
         return;
       }
     }
@@ -157,6 +303,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
     setPersonType('');
     setCompanyName('');
     setTaxId('');
+    setCountryCode('+216');
     setPhone('');
     setAddress('');
     setSignUpName('');
@@ -184,7 +331,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
   const features = [
     { text: 'AI-Powered Invoice Extraction' },
     { text: 'Real-time Financial Analytics' },
-    { text: 'LLaMA 2 AI Assistant' },
+    { text: 'Claude AI Assistant' },
     { text: 'Multi-language Support' },
   ];
 
@@ -297,14 +444,43 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
         </div>
         <div className="space-y-2">
           <Label>{t('regPhone')}</Label>
-          <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+216 XX XXX XXX"
-              className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
-            />
+          <div className="flex gap-2">
+            <Select value={`${countryCode}|${COUNTRIES.find(c => c.code === countryCode)?.name || ''}`} onValueChange={(val) => setCountryCode(val.split('|')[0])}>
+              <SelectTrigger className="w-[130px] shrink-0 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12">
+                <SelectValue>
+                  {(() => {
+                    const c = COUNTRIES.find(c => c.code === countryCode);
+                    return c ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-base leading-none">{c.flag}</span>
+                        <span className="text-sm font-mono">{c.code}</span>
+                      </span>
+                    ) : countryCode;
+                  })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="max-h-[280px]">
+                {COUNTRIES.map((c, i) => (
+                  <SelectItem key={`${c.code}-${c.name}-${i}`} value={`${c.code}|${c.name}`}>
+                    <span className="flex items-center gap-2">
+                      <span className="text-base leading-none">{c.flag}</span>
+                      <span className="text-sm truncate">{c.name}</span>
+                      <span className="text-xs text-muted-foreground font-mono ml-auto">{c.code}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative flex-1">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="XX XXX XXX"
+                className="pl-10 bg-input-background border-border focus:border-accent focus-visible:ring-accent h-12"
+              />
+            </div>
           </div>
         </div>
         <div className="space-y-2">
@@ -331,7 +507,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
       </div>
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label>Full Name</Label>
+          <Label>{t('regFullName')}</Label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -344,7 +520,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Email Address</Label>
+          <Label>{t('regEmail')}</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -358,7 +534,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Password</Label>
+          <Label>{t('regPassword')}</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -372,7 +548,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Confirm Password</Label>
+          <Label>{t('regConfirmPassword')}</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -427,7 +603,9 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
             {phone && (
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">{t('regPhone')}</span>
-                <span className="text-sm font-medium">{phone}</span>
+                <span className="text-sm font-medium">
+                  {(() => { const c = COUNTRIES.find(c => c.code === countryCode); return c ? `${c.flag} ` : ''; })()}{countryCode} {phone}
+                </span>
               </div>
             )}
             {address && (
@@ -443,11 +621,11 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
         <div className="rounded-lg border border-border p-4 space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('regAccountInfo')}</p>
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Name</span>
+            <span className="text-sm text-muted-foreground">{t('name')}</span>
             <span className="text-sm font-medium">{signUpName}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Email</span>
+            <span className="text-sm text-muted-foreground">{t('email')}</span>
             <span className="text-sm font-medium">{signUpEmail}</span>
           </div>
         </div>
@@ -460,10 +638,10 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
             required
           />
           <label htmlFor="terms" className="text-sm text-muted-foreground leading-tight">
-            I agree to the{' '}
-            <a href="#" className="text-accent hover:underline font-medium">Terms of Service</a>
-            {' '}and{' '}
-            <a href="#" className="text-accent hover:underline font-medium">Privacy Policy</a>
+            {t('regAgreeToTerms')}{' '}
+            <a href="#" className="text-accent hover:underline font-medium">{t('regTermsOfService')}</a>
+            {' '}{t('regAnd')}{' '}
+            <a href="#" className="text-accent hover:underline font-medium">{t('regPrivacyPolicy')}</a>
           </label>
         </div>
       </div>
@@ -510,7 +688,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
 
           <div className="pt-2">
             <Badge className="bg-accent/20 text-accent hover:bg-accent/30 border-0 text-sm px-4 py-2">
-              Powered by LLaMA 2 AI Model
+              Powered by Claude AI Model
             </Badge>
           </div>
         </div>
@@ -523,22 +701,22 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                 {activeTab === 'signup' && wizardStep > 0 ? (
                   <>
                     <CardTitle className="text-xl text-card-foreground flex items-center gap-3">
-                      Create Account
+                      {t('regCreateAccount')}
                       <span className="text-sm font-normal text-muted-foreground">{stepLabel}</span>
                     </CardTitle>
                     <CardDescription>
-                      Join SmartInvoice AI today
+                      {t('regJoinSmartInvoice')}
                     </CardDescription>
                   </>
                 ) : (
                   <>
                     <CardTitle className="text-2xl text-card-foreground">
-                      {activeTab === 'signin' ? 'Welcome Back' : 'Create Account'}
+                      {activeTab === 'signin' ? t('regWelcomeBack') : t('regCreateAccount')}
                     </CardTitle>
                     <CardDescription>
                       {activeTab === 'signin'
-                        ? 'Sign in to access your dashboard'
-                        : 'Join SmartInvoice AI today'}
+                        ? t('regSignInDesc')
+                        : t('regJoinSmartInvoice')}
                     </CardDescription>
                   </>
                 )}
@@ -578,10 +756,10 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
             <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val as 'signin' | 'signup'); setError(''); setWizardStep(0); }} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6 bg-muted">
                 <TabsTrigger value="signin" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                  Sign In
+                  {t('regSignIn')}
                 </TabsTrigger>
                 <TabsTrigger value="signup" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-                  Sign Up
+                  {t('regSignUp')}
                 </TabsTrigger>
               </TabsList>
 
@@ -589,7 +767,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
               <TabsContent value="signin">
                 <form onSubmit={handleSignIn} className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="signin-email" className="text-card-foreground">Email Address</Label>
+                    <Label htmlFor="signin-email" className="text-card-foreground">{t('regEmail')}</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -606,12 +784,13 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
 
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <Label htmlFor="signin-password" className="text-card-foreground">Password</Label>
+                      <Label htmlFor="signin-password" className="text-card-foreground">{t('regPassword')}</Label>
                       <button
                         type="button"
+                        onClick={handleForgotOpen}
                         className="text-xs text-accent hover:underline font-medium"
                       >
-                        Forgot password?
+                        {t('regForgotPassword')}
                       </button>
                     </div>
                     <div className="relative">
@@ -629,7 +808,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                   </div>
 
                   {error && activeTab === 'signin' && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
                       {error}
                     </div>
                   )}
@@ -643,7 +822,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <>
-                        Sign In
+                        {t('regSignIn')}
                         <ArrowRight className="h-4 w-4 ml-2" />
                       </>
                     )}
@@ -654,35 +833,31 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
                       <div className="w-full border-t border-border"></div>
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-4 text-muted-foreground font-medium">OR CONTINUE WITH</span>
+                      <span className="bg-card px-4 text-muted-foreground font-medium">{t('regOrContinueWith')}</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <Button
-                      variant="outline"
-                      type="button"
-                      className="border-border h-12 hover:bg-secondary"
-                    >
-                      <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                      </svg>
-                      Google
-                    </Button>
-                    <Button
-                      variant="outline"
-                      type="button"
-                      className="border-border h-12 hover:bg-secondary"
-                    >
-                      <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
-                      </svg>
-                      GitHub
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => triggerGoogleLogin()}
+                    className="w-full border-border h-12 hover:bg-secondary"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        {t('regContinueWithGoogle')}
+                      </>
+                    )}
+                  </Button>
                 </form>
               </TabsContent>
 
@@ -694,7 +869,7 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
 
                   {/* Error */}
                   {error && activeTab === 'signup' && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
                       {error}
                     </div>
                   )}
@@ -756,6 +931,94 @@ export const Authentication = ({ onAuthenticated }: AuthenticationProps) => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Forgot Password Dialog */}
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('regResetPassword')}</DialogTitle>
+            <DialogDescription>
+              {forgotStep === 'email' ? t('regResetPasswordDesc') : t('regEnterResetCode')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            {forgotStep === 'email' ? (
+              <>
+                <div className="space-y-2">
+                  <Label>{t('regEmail')}</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="pl-10 h-12"
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendResetCode()}
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={handleSendResetCode}
+                  disabled={forgotLoading || !forgotEmail.trim()}
+                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-11"
+                >
+                  {forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('regSendResetCode')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>{t('regResetCode')}</Label>
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={resetCode}
+                      onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="000000"
+                      className="pl-10 h-12 text-center tracking-[0.5em] font-mono text-lg"
+                      maxLength={6}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('regNewPassword')}</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pl-10 h-12"
+                      onKeyDown={(e) => e.key === 'Enter' && handleResetPassword()}
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={handleResetPassword}
+                  disabled={forgotLoading || !resetCode.trim() || !newPassword.trim()}
+                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground h-11"
+                >
+                  {forgotLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('regResetMyPassword')}
+                </Button>
+              </>
+            )}
+
+            {forgotError && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+                {forgotError}
+              </div>
+            )}
+            {forgotSuccess && (
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 px-4 py-3 rounded-lg text-sm">
+                {forgotSuccess}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

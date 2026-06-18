@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import {
   login as apiLogin,
   register as apiRegister,
+  googleLogin as apiGoogleLogin,
   getMe,
   type AuthUser,
   type Org,
@@ -20,6 +21,7 @@ interface AuthContextType {
   setOrgs: (orgs: Org[]) => void;
   setCurrentOrgId: (orgId: string) => void;
   login: (email: string, password: string) => Promise<{ orgs?: Org[]; current_org_id?: string }>;
+  googleLogin: (accessToken: string) => Promise<{ orgs?: Org[]; current_org_id?: string }>;
   register: (data: RegisterData) => Promise<{ orgs?: Org[]; current_org_id?: string }>;
   logout: () => void;
   updateToken: (token: string) => void;
@@ -106,6 +108,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { orgs: res.orgs, current_org_id: res.current_org_id };
   }, []);
 
+  const googleLogin = useCallback(async (accessToken: string) => {
+    const res = await apiGoogleLogin(accessToken);
+    localStorage.setItem("token", res.token);
+    localStorage.setItem("user", JSON.stringify(res.user));
+    setToken(res.token);
+    setUser(res.user);
+
+    if (res.orgs) {
+      setOrgsState(res.orgs);
+    }
+    if (res.current_org_id) {
+      setCurrentOrgIdState(res.current_org_id);
+      localStorage.setItem("currentOrgId", res.current_org_id);
+    }
+
+    return { orgs: res.orgs, current_org_id: res.current_org_id };
+  }, []);
+
   const register = useCallback(
     async (data: RegisterData) => {
       const res = await apiRegister(data);
@@ -143,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user, token, loading, orgs, currentOrgId,
         setOrgs, setCurrentOrgId, updateToken,
-        login, register, logout,
+        login, googleLogin, register, logout,
       }}
     >
       {children}

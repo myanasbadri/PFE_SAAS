@@ -885,15 +885,13 @@ export function NotificationPreferences() {
     save({ digest: updated });
   };
 
-  if (loading) {
-    return (
+  if (!prefs) {
+    return loading ? (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
-    );
+    ) : null;
   }
-
-  if (!prefs) return null;
 
   const channelInfo = [
     { key: "in_app" as const, label: "In-App Notifications", desc: "Show notifications inside the app", icon: Monitor },

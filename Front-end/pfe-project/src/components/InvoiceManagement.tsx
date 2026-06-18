@@ -69,6 +69,7 @@ import {
   SearchCode,
 } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
+import { CURRENCIES } from "@/lib/currencies";
 import jsPDF from "jspdf";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -91,6 +92,7 @@ import {
   getInvoices,
   getInvoiceFilters,
   getInvoiceById,
+  getInvoiceFile,
   createInvoice as apiCreateInvoice,
   updateInvoice as apiUpdateInvoice,
   deleteInvoice as apiDeleteInvoice,
@@ -104,6 +106,8 @@ import {
   type InvoiceSearchParams,
   type InvoiceHistoryEntry,
 } from "@/lib/api";
+import InvoiceVerification from "./InvoiceVerification";
+import CompliancePanel from "./CompliancePanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -205,6 +209,15 @@ export const InvoiceManagement = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isEditSaving, setIsEditSaving] = useState(false);
   const [editForm, setEditForm] = useState<InvoiceForm>(emptyForm());
+
+  // ── Verification State ─────────────────────────────────────────────────
+  const [verifyInvoiceId, setVerifyInvoiceId] = useState<string | null>(null);
+  const [verifyData, setVerifyData] = useState<Invoice["data"] | null>(null);
+  const [verifyEditableData, setVerifyEditableData] = useState<Invoice["data"] | null>(null);
+  const [verifyFile, setVerifyFile] = useState<File | null>(null);
+  const [verifySourceFormat, setVerifySourceFormat] = useState<string | undefined>(undefined);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifySaving, setVerifySaving] = useState(false);
 
   // ── Delete State ───────���─────────────────────────────────��───────────
   const [deleteTarget, setDeleteTarget] = useState<DisplayInvoice | null>(null);
@@ -319,7 +332,7 @@ export const InvoiceManagement = () => {
       });
       setInvoices(mapped);
     } catch {
-      toast.error("Failed to load invoices");
+      toast.error(t("failedToLoadInvoices") || "Failed to load invoices");
     } finally {
       setLoading(false);
     }
@@ -666,7 +679,7 @@ export const InvoiceManagement = () => {
       await exportInvoiceExcel(invoice._key);
       toast.success(`Invoice ${invoice.id} exported as Excel`);
     } catch {
-      toast.error("Failed to export Excel.");
+      toast.error(t("failedToExport") || "Failed to export Excel.");
     }
   };
 
@@ -674,9 +687,9 @@ export const InvoiceManagement = () => {
     setIsExporting(true);
     try {
       await exportAllInvoicesExcel();
-      toast.success("All invoices exported as Excel");
+      toast.success(t("allInvoicesExported") || "All invoices exported as Excel");
     } catch {
-      toast.error("Failed to export.");
+      toast.error(t("failedToExport") || "Failed to export.");
     } finally {
       setIsExporting(false);
     }
@@ -774,7 +787,7 @@ export const InvoiceManagement = () => {
 
   const handleCreate = async () => {
     if (!form.vendor_name.trim() && !form.invoice_no.trim()) {
-      toast.error("Enter at least a vendor name or invoice number");
+      toast.error(t("enterVendorOrInvoice") || "Enter at least a vendor name or invoice number");
       return;
     }
 
@@ -816,7 +829,7 @@ export const InvoiceManagement = () => {
         signature: form.signature || undefined,
       });
 
-      toast.success("Invoice created successfully!");
+      toast.success(t("invoiceCreated") || "Invoice created successfully!");
       setForm(emptyForm());
       setIsDialogOpen(false);
       fetchInvoices();
@@ -830,7 +843,7 @@ export const InvoiceManagement = () => {
       if (err instanceof ApiError) {
         toast.error(err.message);
       } else {
-        toast.error("Failed to create invoice.");
+        toast.error(t("failedToCreateInvoice") || "Failed to create invoice.");
       }
     } finally {
       setIsSaving(false);
@@ -847,7 +860,7 @@ export const InvoiceManagement = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be less than 2MB");
+      toast.error(t("imageTooLarge") || "Image must be less than 2MB");
       return;
     }
     const reader = new FileReader();
@@ -867,7 +880,7 @@ export const InvoiceManagement = () => {
       const info = await getInvoiceShareInfo(invoice._key);
       setShareCode(info.share_code);
     } catch {
-      toast.error("Failed to load share info");
+      toast.error(t("failedToLoadShare") || "Failed to load share info");
     }
     setShareLoading(false);
   };
@@ -941,7 +954,7 @@ export const InvoiceManagement = () => {
       });
       setIsEditDialogOpen(true);
     } catch {
-      toast.error("Failed to load invoice details");
+      toast.error(t("failedToLoadInvoice") || "Failed to load invoice details");
     }
   };
 
@@ -989,16 +1002,108 @@ export const InvoiceManagement = () => {
         },
       });
 
-      toast.success("Invoice updated successfully!");
+      toast.success(t("invoiceUpdated") || "Invoice updated successfully!");
       setIsEditDialogOpen(false);
       setEditingInvoiceId(null);
       fetchInvoices();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to update invoice.");
+      else toast.error(t("failedToUpdateInvoice") || "Failed to update invoice.");
     } finally {
       setIsEditSaving(false);
     }
+  };
+
+  // ── Verification handlers ────────────────────────────────────────────
+
+  const openVerification = async (invoice: DisplayInvoice) => {
+    setVerifyLoading(true);
+    try {
+      // Fetch full invoice data
+      const res = await getInvoiceById(invoice._key);
+      const inv = res.invoice;
+      const d = inv.data || {};
+      setVerifyInvoiceId(inv.id);
+      setVerifyData(structuredClone(d));
+      setVerifyEditableData(structuredClone(d));
+      setVerifySourceFormat(inv.source_format);
+
+      // Try to fetch the original file
+      try {
+        const blob = await getInvoiceFile(inv.id);
+        const originalName = inv.original_filename || inv.filename || "invoice";
+        const file = new File([blob], originalName, { type: blob.type });
+        setVerifyFile(file);
+      } catch {
+        // File may not be available (manual entry, imported, deleted)
+        setVerifyFile(null);
+      }
+    } catch {
+      toast.error(t("failedToLoad") || "Failed to load invoice details");
+      setVerifyLoading(false);
+      return;
+    }
+    setVerifyLoading(false);
+  };
+
+  const closeVerification = () => {
+    setVerifyInvoiceId(null);
+    setVerifyData(null);
+    setVerifyEditableData(null);
+    setVerifyFile(null);
+    setVerifySourceFormat(undefined);
+  };
+
+  const handleVerifySave = async () => {
+    if (!verifyInvoiceId || !verifyEditableData) return;
+    setVerifySaving(true);
+    try {
+      await apiUpdateInvoice(verifyInvoiceId, {
+        data: verifyEditableData,
+        status: "reviewed",
+      });
+      toast.success(t("invoiceSavedSuccess") || "Invoice saved successfully");
+      setVerifyData(structuredClone(verifyEditableData));
+      fetchInvoices();
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error(t("failedToSave") || "Failed to save invoice");
+    } finally {
+      setVerifySaving(false);
+    }
+  };
+
+  const verifyUpdateField = (path: string, value: string | number | null) => {
+    if (!verifyEditableData) return;
+    const clone = structuredClone(verifyEditableData);
+    const keys = path.split(".");
+    let obj: Record<string, unknown> = clone as Record<string, unknown>;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!obj[keys[i]] || typeof obj[keys[i]] !== "object") obj[keys[i]] = {};
+      obj = obj[keys[i]] as Record<string, unknown>;
+    }
+    obj[keys[keys.length - 1]] = value;
+    setVerifyEditableData(clone);
+  };
+
+  const verifyUpdateLineItem = (index: number, field: string, value: string) => {
+    if (!verifyEditableData?.line_items) return;
+    const clone = structuredClone(verifyEditableData);
+    if (clone.line_items && clone.line_items[index]) {
+      if (field === "description") {
+        (clone.line_items[index] as Record<string, unknown>)[field] = value;
+      } else {
+        (clone.line_items[index] as Record<string, unknown>)[field] = value === "" ? null : Number(value);
+      }
+    }
+    setVerifyEditableData(clone);
+  };
+
+  const verifyRemoveLineItem = (index: number) => {
+    if (!verifyEditableData?.line_items) return;
+    const clone = structuredClone(verifyEditableData);
+    clone.line_items!.splice(index, 1);
+    setVerifyEditableData(clone);
   };
 
   // ── Edit form helpers (mirror create form helpers) ─────────────────────
@@ -1069,7 +1174,7 @@ export const InvoiceManagement = () => {
       fetchInvoices();
     } catch (err) {
       if (err instanceof ApiError) toast.error(err.message);
-      else toast.error("Failed to delete invoice.");
+      else toast.error(t("failedToDeleteInvoice") || "Failed to delete invoice.");
     } finally {
       setIsDeleting(false);
     }
@@ -1083,7 +1188,7 @@ export const InvoiceManagement = () => {
       toast.success(`Status updated to ${newStatus}`);
       fetchInvoices();
     } catch {
-      toast.error("Failed to update status");
+      toast.error(t("failedToUpdateStatus") || "Failed to update status");
     }
   };
 
@@ -1096,7 +1201,7 @@ export const InvoiceManagement = () => {
       const res = await getInvoiceHistory(invoice._key);
       setHistoryEntries(res.history);
     } catch {
-      toast.error("Failed to load history");
+      toast.error(t("failedToLoadHistory") || "Failed to load history");
       setHistoryEntries([]);
     } finally {
       setHistoryLoading(false);
@@ -1152,6 +1257,45 @@ export const InvoiceManagement = () => {
   };
 
   // ── Render ────────────────────────────────────────────────────────────
+
+  // ── Verification full-screen mode ────────────────────────────────────
+  if (verifyInvoiceId && verifyData && verifyEditableData) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">
+              {t("verifyInvoice") || "Verify Invoice"}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("verifyAndCorrect") || "Verify and correct the extracted invoice data"}
+            </p>
+          </div>
+          <Button variant="outline" onClick={closeVerification} className="gap-2">
+            <X className="h-4 w-4" />
+            {t("backToInvoices") || "Back to Invoices"}
+          </Button>
+        </div>
+        <InvoiceVerification
+          file={verifyFile}
+          data={verifyData}
+          editableData={verifyEditableData}
+          invoiceId={verifyInvoiceId}
+          isSaving={verifySaving}
+          onFieldChange={verifyUpdateField}
+          onLineItemChange={verifyUpdateLineItem}
+          onLineItemRemove={verifyRemoveLineItem}
+          onSave={handleVerifySave}
+          onCancel={closeVerification}
+        />
+        <CompliancePanel
+          invoiceId={verifyInvoiceId}
+          sourceFormat={verifySourceFormat}
+          onUpdate={() => fetchInvoices()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1256,14 +1400,18 @@ export const InvoiceManagement = () => {
                         <Label className="text-xs text-muted-foreground">
                           Currency
                         </Label>
-                        <Input
-                          value={form.currency}
-                          onChange={(e) =>
-                            updateField("currency", e.target.value)
-                          }
-                          placeholder="USD"
-                          className="h-9 text-sm"
-                        />
+                        <Select value={form.currency} onValueChange={(v) => updateField("currency", v)}>
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Select currency" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            {CURRENCIES.map((c) => (
+                              <SelectItem key={c.code} value={c.code}>
+                                {c.code} ({c.symbol})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -2192,6 +2340,16 @@ export const InvoiceManagement = () => {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-[#10B981]"
+                              onClick={() => openVerification(invoice)}
+                              title={t("verifyInvoice") || "Verify"}
+                              disabled={verifyLoading}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-8 w-8 text-muted-foreground hover:text-blue-600"
                               onClick={() => openEditDialog(invoice)}
                               title="Edit"
@@ -2446,7 +2604,18 @@ export const InvoiceManagement = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Currency</Label>
-                    <Input value={editForm.currency} onChange={(e) => updateEditField("currency", e.target.value)} placeholder="USD" className="h-9 text-sm" />
+                    <Select value={editForm.currency || "USD"} onValueChange={(v) => updateEditField("currency", v)}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {CURRENCIES.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>
+                            {c.code} ({c.symbol})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground flex items-center gap-1">

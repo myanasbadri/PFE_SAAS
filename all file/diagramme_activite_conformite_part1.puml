@@ -1,0 +1,73 @@
+@startuml Diagramme_Activite_Conformite_Part1
+title Diagramme d'activité — Conformité fiscale (1/2) : Familles 1 à 4
+skinparam activityBackgroundColor #F0F4FF
+skinparam activityBorderColor #3366CC
+skinparam activityDiamondBackgroundColor #FFFFCC
+skinparam activityDiamondBorderColor #CC9900
+skinparam titleFontSize 18
+
+start
+:Recevoir les données\nde la facture extraite;
+
+partition "Famille 1 : Champs obligatoires" #E8F0FE {
+  :Vérifier la présence de :\n• vendor_name (émetteur)\n• invoice_no (numéro)\n• bill_to.name (destinataire)\n• line_items (au moins 1 ligne)\n• totals.grand_total (total);
+  if (Champs manquants ?) then (Oui)
+    :Ajouter une erreur **critique**\npar champ manquant;
+    note right
+      Code : MISSING_VENDOR,
+      MISSING_INVOICE_NO,
+      MISSING_BUYER, etc.
+      Sévérité : **critique**
+    end note
+  else (Non)
+  endif
+}
+
+partition "Famille 2 : Format des dates" #E8F5E9 {
+  :Vérifier le format des dates\n(date, due_date);
+  if (Format valide YYYY-MM-DD ?) then (Oui)
+    if (Date future > J+1 ?) then (Oui)
+      :Ajouter une erreur\n(FUTURE_DATE);
+    else (Non)
+    endif
+  else (Non)
+    :Ajouter une erreur\n(INVALID_DATE_FORMAT);
+  endif
+}
+
+partition "Famille 3 : Matricule fiscal" #F3E5F5 {
+  :Vérifier le matricule fiscal\n(seller_vat_id, buyer_vat_id);
+  if (Matricule présent ?) then (Oui)
+    if (Format tunisien valide ?) then (Oui)
+      note right
+        Formats acceptés :
+        • 1234567A/P/M/000
+        • 1234567APM000
+        • 1234567A (court)
+      end note
+    else (Non)
+      :Ajouter une erreur\n(INVALID_VAT_FORMAT);
+    endif
+  else (Non)
+    :Ajouter une erreur critique\n(MISSING_VAT_ID);
+  endif
+}
+
+partition "Famille 4 : Intégrité des lignes" #FFF9C4 {
+  :Vérifier chaque ligne\nde la facture;
+  while (Pour chaque ligne)
+    if (Description présente ?) then (Non)
+      :Erreur MISSING_ITEM_DESCRIPTION;
+    else (Oui)
+    endif
+    if (Total déterminable ?\n(explicite ou qté × prix)) then (Non)
+      :Erreur MISSING_ITEM_TOTAL;
+    else (Oui)
+    endif
+  endwhile
+}
+
+:Suite : Familles 5 à 7\net calcul du score\n(voir diagramme 2/2);
+stop
+
+@enduml

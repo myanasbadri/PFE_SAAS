@@ -1,0 +1,129 @@
+@startuml Diagramme_Sequence_Authentification_JWT_Part2
+title Diagramme de séquence — Authentification JWT (2/2) : Autorisation multi-tenant
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "@token_required" as tokdec #FFF9C4
+  participant "@org_required" as orgdec #FFE0B2
+  database "MongoDB" as db #F3E5F5
+end box
+
+== Phase 2 : Requête authentifiée avec contexte multi-tenant ==
+
+user -> front : Accéder aux factures\nde l'organisation
+activate front
+
+note right of front
+  **Composant : InvoiceManagement**
+  ─────────────────────────────────
+  • Récupère le token JWT
+    depuis localStorage
+  • Ajoute les headers
+    Authorization et X-Org-Id
+end note
+
+front -> api : **GET /api/invoices**\nHeaders :\n  Authorization: Bearer <JWT>\n  X-Org-Id: <org_id>
+activate api
+
+note over api
+  La requête traverse
+  les décorateurs en chaîne
+  (patron Décorateur)
+end note
+
+api -> tokdec : Vérifier le token JWT
+activate tokdec
+
+tokdec -> tokdec : **jwt.decode()**\nVérifier signature + expiration
+
+alt Token expiré ou invalide
+  tokdec --> front : **401 Unauthorized**\n{ error: "Token expired" }
+  front --> user : Rediriger vers Login
+else Token valide
+
+  tokdec -> db : Vérifier que le compte\nest toujours actif
+  activate db
+  db --> tokdec : is_active = true
+  deactivate db
+
+  tokdec -> tokdec : Extraire user_id\ndepuis le payload
+  tokdec --> api : Utilisateur identifié\n(user_id injecté dans request)
+  deactivate tokdec
+
+  api -> orgdec : Vérifier l'appartenance\nà l'organisation
+  activate orgdec
+
+  orgdec -> orgdec : Extraire org_id depuis\nl'en-tête X-Org-Id
+
+  orgdec -> db : Requête collection **memberships**\n{ user_id, org_id }
+  activate db
+  db --> orgdec : Membership document\n{ role: "admin", joined_at }
+  deactivate db
+
+  alt Utilisateur non membre
+    orgdec --> front : **403 Forbidden**\n{ error: "Access denied" }
+    front --> user : Afficher erreur d'accès
+  else Utilisateur est membre
+
+    orgdec --> api : Membre confirmé\n(org_role injecté dans request)
+    deactivate orgdec
+
+    note right of api
+      Hiérarchie des rôles :
+      ─────────────────────
+      owner > admin > member
+
+      member : CRUD factures
+      admin  : + gestion équipe
+      owner  : + paramètres org
+                + suppression org
+    end note
+
+    == Phase 3 : Traitement de la requête ==
+
+    api -> db : **db.invoices.find(**\n  { org_id: <org_id>, ... }\n**)**
+    activate db
+    note right of db
+      **Isolation multi-tenant**
+      Chaque requête est filtrée
+      par org_id — aucune facture
+      d'une autre organisation
+      ne peut être retournée
+    end note
+    db --> api : Liste des factures\n(filtrées par org_id)
+    deactivate db
+
+    api --> front : **200 OK**\n{ invoices[], total, page }
+    deactivate api
+
+    front -> front : Mettre à jour la vue\ntabulaire des factures
+    front --> user : Afficher la liste\ndes factures avec filtres\net pagination
+    deactivate front
+
+  end
+end
+
+== Phase 4 : Renouvellement du token (si expiré) ==
+
+user -> front : Action quelconque
+activate front
+front -> api : Requête avec token expiré
+activate api
+api --> front : **401** { error: "Token expired" }
+deactivate api
+front -> front : Supprimer le token\nde localStorage
+front --> user : Rediriger vers Login\navec message "Session expirée"
+deactivate front
+
+@enduml

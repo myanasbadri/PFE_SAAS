@@ -46,7 +46,7 @@ const features = [
   {
     icon: Sparkles,
     title: 'AI-Powered Extraction',
-    description: 'Extract invoice data instantly using advanced OCR and LLaMA 2 AI. No manual data entry required.',
+    description: 'Extract invoice data instantly using advanced OCR and Claude AI. No manual data entry required.',
     color: 'from-blue-500 to-cyan-500',
   },
   {
@@ -90,7 +90,7 @@ const steps = [
   {
     icon: Brain,
     title: 'AI Extracts Data',
-    description: 'Our LLaMA 2 AI instantly extracts and structures all invoice information.',
+    description: 'Our Claude AI instantly extracts and structures all invoice information.',
   },
   {
     icon: CheckCircle,
@@ -204,7 +204,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
             <div className="space-y-8">
               <Badge className="bg-card/10 text-white border-white/20 hover:bg-card/20">
                 <Sparkles className="h-3 w-3 mr-1" />
-                Powered by LLaMA 2 AI
+                Powered by Claude AI
               </Badge>
               
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-tight">
@@ -228,10 +228,9 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
                   Get Started Free
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
-                <Button 
-                  size="lg" 
-                  variant="outline" 
-                  className="border-white/20 text-white hover:bg-card/10 text-lg px-8 py-6"
+                <Button
+                  size="lg"
+                  className="bg-transparent border border-white/20 text-white hover:bg-white/10 hover:text-white text-lg px-8 py-6"
                 >
                   Request Demo
                   <ChevronRight className="ml-2 h-5 w-5" />
@@ -563,7 +562,7 @@ export const LandingPage = ({ onGetStarted }: LandingPageProps) => {
             <Button 
               size="lg" 
               variant="outline" 
-              className="border-white/20 text-white hover:bg-card/10 text-lg px-8 py-6"
+              className="border-white/20 text-white hover:bg-white/10 hover:text-white text-lg px-8 py-6"
             >
               Schedule Demo
             </Button>

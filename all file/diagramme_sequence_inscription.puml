@@ -1,0 +1,134 @@
+@startuml Diagramme_Sequence_Inscription
+title Diagramme de séquence — Inscription en cinq étapes
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  database "MongoDB" as db #F3E5F5
+end box
+
+note over front
+  **Composant : Authentication**
+  (mode inscription — assistant en 5 étapes)
+  Indicateur de progression visuel (0-4)
+end note
+
+== Étape 0 : Type d'activité ==
+
+user -> front : Sélectionner le type d'activité
+activate front
+note right of user
+  Options disponibles :
+  • Commercial
+  • Service
+  • Industriel
+  • Profession libérale
+  • Artisanal
+end note
+front -> front : Enregistrer activity_type\ndans l'état local (useState)
+front --> user : Mettre à jour la barre\nde progression (étape 1/5)
+
+== Étape 1 : Type de personne ==
+
+user -> front : Sélectionner le type de personne
+note right of user
+  • Personne physique
+  • Personne morale
+end note
+front -> front : Enregistrer person_type\ndans l'état local
+front --> user : Avancer à l'étape suivante\n(barre de progression 2/5)
+
+== Étape 2 : Informations professionnelles ==
+
+user -> front : Saisir les informations\nde l'entreprise (optionnel)
+note right of user
+  Champs optionnels :
+  • Nom de l'entreprise
+  • Matricule fiscal
+  • Téléphone (+ indicatif)
+  • Adresse
+end note
+front -> front : Enregistrer company_name,\ntax_id, phone, address
+front --> user : Avancer à l'étape suivante\n(barre de progression 3/5)
+
+== Étape 3 : Identifiants du compte ==
+
+user -> front : Saisir nom, email,\nmot de passe
+front -> front : Valider côté client :\n• Champs requis non vides\n• Mot de passe >= 6 caractères\n• Confirmation identique
+note right of front
+  **Validation en temps réel**
+  L'interface affiche les erreurs
+  de validation au fur et à mesure
+  de la saisie (feedback immédiat)
+end note
+front --> user : Avancer à l'étape suivante\n(barre de progression 4/5)
+
+== Étape 4 : Récapitulatif et soumission ==
+
+front --> user : Afficher le récapitulatif\nde toutes les données saisies
+
+user -> front : Confirmer et soumettre\nl'inscription
+
+front -> front : Afficher l'indicateur\nde chargement (spinner)
+
+front -> api : **POST /api/auth/register**\n{ name, email, password, role,\n  activity_type, person_type,\n  company_name, tax_id,\n  phone, address }
+activate api
+
+api -> api : Valider les champs requis\n(name, email, password)\n+ valider activity_type\n  et person_type
+
+alt Champs manquants ou invalides
+  api --> front : **400 Bad Request**\n{ error: "Missing required fields" }
+  front --> user : Afficher les champs\nmanquants en rouge
+else Champs valides
+
+  api -> db : Vérifier l'unicité de l'email\nusers.find_one({ email })
+  activate db
+  db --> api : Résultat
+  deactivate db
+
+  alt Email déjà utilisé
+    api --> front : **409 Conflict**\n{ error: "Email already exists" }
+    front --> user : « Cet email est déjà\nenregistré »
+  else Email disponible
+
+    api -> api : **bcrypt.hashpw()**\nHacher le mot de passe
+
+    api -> db : **users.insert_one(**\n  { name, email, password_hash,\n    role: "client", is_active: true,\n    activity_type, person_type,\n    company_name, tax_id,\n    phone, address,\n    created_at }\n**)**
+    activate db
+    db --> api : user_id créé
+    deactivate db
+
+    api -> db : **create_personal_org()**\norgs.insert_one() +\nmemberships.insert_one(\n  { user_id, org_id, role: "owner" })
+    activate db
+    db --> api : org_id créé
+    deactivate db
+
+    api -> db : **activity.insert_one(**\n  { action: "register",\n    user_id, org_id,\n    details: { email, role } }\n**)**
+    activate db
+    db --> api : OK
+    deactivate db
+
+    api -> api : **jwt.encode()**\nGénérer le token JWT\n(payload: user_id, email,\nrole, org_id, org_role,\nexp: 24h)
+
+    api --> front : **201 Created**\n{ token, user, orgs,\n  current_org_id }
+    deactivate api
+
+    front -> front : Stocker le token JWT\net le contexte organisationnel\ndans localStorage
+    front --> user : Rediriger vers\nle Dashboard
+
+  end
+end
+
+deactivate front
+
+@enduml

@@ -1,0 +1,106 @@
+@startuml Diagramme_Sequence_Authentification_JWT_Part1
+title Diagramme de séquence — Authentification JWT (1/2) : Connexion
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  database "MongoDB" as db #F3E5F5
+end box
+
+== Phase 1 : Authentification (Login) ==
+
+user -> front : Saisir email + mot de passe\ndans le formulaire de connexion
+activate front
+
+note right of front
+  **Composant : Authentication**
+  ─────────────────────────────
+  • Formulaire de connexion
+  • Validation côté client
+    (email non vide, mdp non vide)
+  • Indicateur de chargement
+end note
+
+front -> front : Valider les champs\ncôté client
+
+front -> api : **POST /api/auth/login**\n{ email, password }
+activate api
+
+api -> db : Rechercher l'utilisateur\npar email
+activate db
+db --> api : Données utilisateur\n(hash bcrypt, rôle, is_active)
+deactivate db
+
+alt Utilisateur non trouvé
+  api --> front : **401 Unauthorized**\n{ error: "Invalid credentials" }
+  front --> user : Afficher message d'erreur
+else Utilisateur trouvé
+
+  api -> api : Vérifier le compte actif\n(is_active == true)
+
+  alt Compte désactivé
+    api --> front : **401 Unauthorized**\n{ error: "Account deactivated" }
+    front --> user : Afficher « Compte désactivé »
+  else Compte actif
+
+    api -> api : **bcrypt.checkpw()**\nComparer le mot de passe\navec le hash stocké
+
+    alt Mot de passe incorrect
+      api --> front : **401 Unauthorized**\n{ error: "Invalid credentials" }
+      front --> user : Afficher message d'erreur
+    else Mot de passe correct
+
+      api -> db : **get_user_orgs(user_id)**\nRécupérer les organisations
+      activate db
+      db --> api : Liste des organisations\n+ rôles par organisation
+      deactivate db
+
+      alt Aucune organisation
+        api -> db : **create_personal_org()**\nCréer l'organisation personnelle\n+ membership (role: "owner")
+        activate db
+        db --> api : org_id créé
+        deactivate db
+      end
+
+      api -> api : **jwt.encode()**\nGénérer le token JWT
+      note right of api
+        Payload JWT :
+        ─────────────
+        • user_id
+        • email
+        • role (admin/client)
+        • org_id (auto-sélectionné)
+        • org_role
+        • exp (24h)
+        • iat (timestamp)
+      end note
+
+      api -> db : Mettre à jour last_login\n+ enregistrer l'événement\nde connexion (activity)
+      activate db
+      db --> api : OK
+      deactivate db
+
+      api --> front : **200 OK**\n{ token, user, organizations[] }
+      deactivate api
+
+      front -> front : Stocker le token JWT\ndans localStorage
+      front -> front : Stocker le contexte\norganisationnel (org_id)
+      front --> user : Rediriger vers\nle Dashboard
+
+    end
+  end
+end
+
+deactivate front
+
+@enduml

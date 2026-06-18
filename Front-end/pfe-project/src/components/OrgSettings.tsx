@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { CURRENCIES } from "@/lib/currencies";
 import {
   getOrgDetails, updateOrg, getBilling, createCheckoutSession, createPortalSession,
   type BillingInfo,
@@ -84,7 +85,7 @@ export default function OrgSettings() {
         setTimezone(res.org.settings?.timezone || "UTC");
         setPrimaryColor(res.org.branding?.primary_color || "");
       })
-      .catch(() => toast.error("Failed to load organization details"))
+      .catch(() => toast.error(t("orgLoadFailed") || "Failed to load organization details"))
       .finally(() => setLoading(false));
   }, [currentOrgId]);
 
@@ -95,7 +96,7 @@ export default function OrgSettings() {
       const res = await getBilling(currentOrgId);
       setBilling(res.billing);
     } catch {
-      toast.error("Failed to load billing info");
+      toast.error(t("billingLoadFailed") || "Failed to load billing info");
     } finally {
       setBillingLoading(false);
     }
@@ -112,7 +113,7 @@ export default function OrgSettings() {
       });
       toast.success(t("saved") || "Settings saved");
     } catch {
-      toast.error("Failed to save settings");
+      toast.error(t("orgSaveFailed") || "Failed to save settings");
     } finally {
       setSaving(false);
     }
@@ -123,8 +124,9 @@ export default function OrgSettings() {
     try {
       const res = await createCheckoutSession(currentOrgId, plan);
       window.location.href = res.checkout_url;
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to start checkout");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t("checkoutFailed") || "Failed to start checkout";
+      toast.error(message);
     }
   };
 
@@ -133,21 +135,19 @@ export default function OrgSettings() {
     try {
       const res = await createPortalSession(currentOrgId);
       window.location.href = res.portal_url;
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to open billing portal");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t("billingPortalFailed") || "Failed to open billing portal";
+      toast.error(message);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {loading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 rounded-lg">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )}
       <div>
         <h1 className="text-2xl font-bold">{t("orgSettings") || "Settings"}</h1>
         <p className="text-muted-foreground">
@@ -192,13 +192,12 @@ export default function OrgSettings() {
                   <Label>{t("defaultCurrency") || "Default Currency"}</Label>
                   <Select value={currency} onValueChange={setCurrency} disabled={!isOwnerOrAdmin}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="EUR">EUR (€)</SelectItem>
-                      <SelectItem value="GBP">GBP (£)</SelectItem>
-                      <SelectItem value="MAD">MAD (د.م.)</SelectItem>
-                      <SelectItem value="TND">TND (د.ت)</SelectItem>
-                      <SelectItem value="DZD">DZD (د.ج)</SelectItem>
+                    <SelectContent className="max-h-[300px]">
+                      {CURRENCIES.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.code} ({c.symbol}) — {c.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

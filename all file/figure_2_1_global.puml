@@ -1,0 +1,188 @@
+@startuml
+' ============================================================
+'  Figure 2.1 -- Diagramme de Cas d Utilisation Global
+'  SmartInvoice AI
+' ============================================================
+
+top to bottom direction
+skinparam backgroundColor #FFFFFF
+skinparam handwritten false
+skinparam shadowing true
+skinparam dpi 200
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 13
+skinparam wrapWidth 150
+skinparam minClassWidth 180
+skinparam ranksep 40
+skinparam nodesep 25
+
+skinparam usecase {
+    BackgroundColor #DCEEFB
+    BorderColor #2E75B6
+    BorderThickness 2
+    FontColor #0A2540
+    FontSize 12
+    FontStyle plain
+}
+
+skinparam actor {
+    BackgroundColor #2E75B6
+    BorderColor #0A2540
+    FontColor #0A2540
+    FontSize 14
+    FontStyle bold
+}
+
+skinparam rectangle {
+    BackgroundColor #F5F9FF
+    BorderColor #2E75B6
+    BorderThickness 2.5
+    FontColor #1A5276
+    FontSize 15
+    FontStyle bold
+    RoundCorner 15
+}
+
+skinparam package {
+    BackgroundColor #EDF4FC
+    BorderColor #5DADE2
+    BorderThickness 1.5
+    FontColor #1A5276
+    FontSize 13
+    FontStyle bold
+    Style rectangle
+    RoundCorner 10
+}
+
+skinparam arrow {
+    Color #2C3E50
+    FontColor #2E75B6
+    FontSize 11
+    Thickness 1.5
+}
+
+skinparam legend {
+    BackgroundColor #F5F9FF
+    BorderColor #2E75B6
+    FontSize 12
+}
+
+title <size:22><b>Diagramme de Cas d'Utilisation Global</b></size>\n<size:14><color:#2E75B6>SmartInvoice AI -- Plateforme SaaS Multi-Tenant</color></size>
+
+' ======= Acteurs =======
+actor "Client" as C
+actor "Admin Plateforme" as A
+
+C <|-- A : <<herite>>
+
+actor "Systeme\n(automatique)" as S
+
+' ======= Systeme principal =======
+rectangle "           SmartInvoice AI           " {
+
+  ' -------- LIGNE 1 : Auth + Extraction --------
+  package "  Authentification  " as P1 {
+    usecase "S'inscrire\n(assistant 5 etapes)" as UC01
+    usecase "Se connecter\n(JWT 24h)" as UC02
+  }
+
+  package "  Extraction & Intelligence Artificielle  " as P2 {
+    usecase "Uploader & extraire\ndes factures" as UC03
+    usecase "Verifier / corriger\nune extraction" as UC14
+    usecase "Classifier\nbiens / services" as UC15 #FFF8E1;line:F59E0B
+    usecase "Parser une\nfacture XML" as UC25 #FFF8E1;line:F59E0B
+  }
+
+  ' -------- LIGNE 2 : Factures + Partage --------
+  package "  Gestion des Factures  " as P3 {
+    usecase "Gerer les factures\n(CRUD + filtres)" as UC04
+    usecase "Valider la\nconformite fiscale" as UC05
+    usecase "Verifier la\nsignature XML" as UC16
+    usecase "Rapport de\nconformite unifie" as UC19
+    usecase "Exporter\nCSV / Excel / PDF" as UC09
+  }
+
+  package "  Partage Inter-Organisations  " as P4 {
+    usecase "Generer un QR\nde partage" as UC17
+    usecase "Scanner & importer\nune facture" as UC18
+    usecase "Saisir un code\nde partage" as UC18b
+  }
+
+  ' -------- LIGNE 3 : Fiscal + Pilotage --------
+  package "  Conformite Fiscale  " as P5 {
+    usecase "Generer un\ncertificat TEJ" as UC06
+    usecase "Soumettre a\nTTN El Fatoora" as UC10
+  }
+
+  package "  Pilotage & Analyse  " as P6 {
+    usecase "Consulter le\ntableau de bord" as UC07
+    usecase "Consulter le\nconseiller IA" as UC08
+  }
+
+  ' -------- LIGNE 4 : Organisation + Admin --------
+  package "  Organisation & Equipe  " as P7 {
+    usecase "Gerer l'equipe\net les roles" as UC11
+    usecase "Configurer les\npreferences notif." as UC20
+    usecase "Personnaliser\nlogo / signature" as UC21
+    usecase "Gerer\nl'abonnement" as UC22
+  }
+
+  package "  Administration  " as P8 {
+    usecase "Gerer les\nutilisateurs" as UC12
+    usecase "Diffuser une\nnotification" as UC13 #FFF8E1;line:F59E0B
+  }
+}
+
+' === Client ===
+C --> UC01
+C --> UC02
+C --> UC03
+C --> UC14
+C --> UC04
+C --> UC05
+C --> UC16
+C --> UC19
+C --> UC09
+C --> UC17
+C --> UC18
+C --> UC18b
+C --> UC06
+C --> UC10
+C --> UC07
+C --> UC08
+C --> UC11
+C --> UC20
+C --> UC21
+C --> UC22
+
+' === Admin (herite du Client + ses propres UC) ===
+A --> UC12
+A --> UC13
+
+' === Systeme automatique ===
+S --> UC15
+S --> UC25
+S --> UC13
+
+' === Forcer la disposition en grille ===
+P1 -[hidden]right- P2
+P3 -[hidden]right- P4
+P5 -[hidden]right- P6
+P7 -[hidden]right- P8
+
+P1 -[hidden]down- P3
+P2 -[hidden]down- P4
+P3 -[hidden]down- P5
+P4 -[hidden]down- P6
+P5 -[hidden]down- P7
+P6 -[hidden]down- P8
+
+' === Legende ===
+legend bottom right
+  <b>Legende</b>
+  |<back:#DCEEFB>       </back>| Cas d'utilisation |
+  |<back:#FFF8E1>       </back>| Automatique (systeme) |
+  | <color:#2C3E50><b>--|></b></color> | Heritage (Admin herite de Client) |
+endlegend
+
+@enduml

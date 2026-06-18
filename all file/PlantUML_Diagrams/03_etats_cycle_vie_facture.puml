@@ -1,0 +1,133 @@
+@startuml Diagramme_Etats_Cycle_Vie_Facture
+title Diagramme d'états — Cycle de vie d'une facture
+skinparam stateFontSize 13
+skinparam titleFontSize 18
+skinparam stateBackgroundColor #F0F4FF
+skinparam stateBorderColor #3366CC
+
+[*] --> Uploadee : Utilisateur dépose\nun fichier
+
+state "Uploadée" as Uploadee #E3F2FD {
+  Uploadee : Fichier reçu par le serveur
+  Uploadee : Tâche Celery créée
+}
+
+Uploadee --> EnTraitement : Tâche Celery\ndémarre le pipeline
+
+state "En traitement" as EnTraitement #FFF9C4 {
+  state "Extraction de texte" as ExtTexte
+  state "Analyse par IA" as AnalyseIA
+  state "Classification" as Classification
+  state "Contrôle de conformité" as Conformite
+
+  [*] --> ExtTexte
+
+  ExtTexte --> AnalyseIA : Texte brut obtenu\n(OCR / pdfplumber)
+  ExtTexte --> Classification : XML détecté\n(extraction déterministe)
+
+  AnalyseIA --> Classification : Données JSON\nextraites par LLM
+  Classification --> Conformite : Catégorie déterminée\n(biens / services / mixte)
+}
+
+EnTraitement --> Extraite : Extraction réussie\n+ score de confiance calculé
+EnTraitement --> Echouee : Tous les moteurs\nont échoué
+
+state "Extraite" as Extraite #C8E6C9 {
+  Extraite : Données structurées disponibles
+  Extraite : Score de confiance attribué
+  Extraite : Score de conformité calculé
+}
+
+state "Échouée" as Echouee #FFCDD2 {
+  Echouee : Aucun moteur n'a pu extraire
+  Echouee : L'utilisateur est notifié
+}
+
+Echouee --> Uploadee : Utilisateur re-uploade\nle fichier
+
+Extraite --> AVerifier : Score de confiance\n< seuil défini
+Extraite --> Verifiee : Score de confiance\n≥ seuil (confiance élevée)
+
+state "À vérifier" as AVerifier #FFE0B2 {
+  AVerifier : Champs incertains surlignés
+  AVerifier : Interface split-view activée
+  AVerifier : Attente de révision humaine
+}
+
+AVerifier --> EnVerification : Utilisateur ouvre\nl'interface de vérification
+
+state "En vérification" as EnVerification #FFF3E0 {
+  EnVerification : Comparaison document / données
+  EnVerification : Correction des champs erronés
+  EnVerification : Validation champ par champ
+}
+
+EnVerification --> Verifiee : Utilisateur valide\ntoutes les corrections
+EnVerification --> AVerifier : Utilisateur sauvegarde\nsans finaliser
+
+state "Vérifiée" as Verifiee #A5D6A7 {
+  Verifiee : Données confirmées (par IA ou humain)
+  Verifiee : Prête pour évaluation de conformité
+}
+
+Verifiee --> Conforme : Score conformité ≥ seuil\n(7 familles validées)
+Verifiee --> NonConforme : Score conformité < seuil\n(anomalies détectées)
+
+state "Conforme" as Conforme #66BB6A {
+  Conforme : Toutes les règles fiscales respectées
+  Conforme : Éligible à la soumission TTN
+}
+
+state "Non conforme" as NonConforme #EF9A9A {
+  NonConforme : Anomalies identifiées
+  NonConforme : Détail des règles violées affiché
+}
+
+NonConforme --> EnVerification : Utilisateur corrige\nles anomalies
+
+Conforme --> Soumise : Soumission à\nTTN El Fatoora
+
+state "Soumise" as Soumise #2E7D32 {
+  Soumise : Transmise à la plateforme nationale
+  Soumise : Statut final
+}
+
+Conforme --> Partagee : Génération QR code\n(INV-XXXXXXXX)
+
+state "Partagée" as Partagee #CE93D8 {
+  Partagee : Code de partage généré
+  Partagee : QR code avec SHA-256
+  Partagee : Accessible par scan
+}
+
+Partagee --> Importee : Scan QR par un autre\nutilisateur / organisation
+
+state "Importée" as Importee #BA68C8 {
+  Importee : Copiée dans l'organisation cible
+  Importee : Traçabilité : imported_from + imported_at
+  Importee : Vérification intégrité SHA-256
+}
+
+Importee --> Verifiee : L'importateur vérifie\nles données
+
+note right of Echouee
+  L'utilisateur peut retenter
+  avec un fichier de
+  meilleure qualité
+end note
+
+note bottom of Soumise
+  État final —
+  la facture est archivée
+  dans le journal d'audit
+end note
+
+note right of Partagee
+  Le partage n'empêche pas
+  la soumission —
+  les deux états coexistent
+end note
+
+Soumise --> [*]
+
+@enduml

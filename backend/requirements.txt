@@ -19,13 +19,13 @@ Pillow
 celery
 redis
 
-# LLM - primary (local)
+# LLM - primary (Claude API)
+anthropic
+
+# LLM - fallback (local Ollama)
 # Ollama runs as a separate process, no pip package needed
 
-# LLM - fallback (free API)
-groq
-
-# HTTP calls (Ollama API)
+# HTTP calls (Ollama API, Google OAuth verification)
 requests
 
 # Date parsing (normalize any date format → YYYY-MM-DD)

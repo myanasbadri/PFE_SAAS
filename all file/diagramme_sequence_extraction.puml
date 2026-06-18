@@ -1,0 +1,228 @@
+@startuml Diagramme_Sequence_Extraction
+title Diagramme de séquence — Extraction intelligente de facture
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "Worker\n(Celery / Thread)" as worker #FFF9C4
+  participant "Extractor\nCore" as extractor #FFE0B2
+  database "MongoDB" as db #F3E5F5
+end box
+
+box "Services IA" #FFF3E0
+  participant "Claude Vision\n(API Anthropic)" as claude #FFCC80
+  participant "Ollama\n(Local)" as ollama #FFAB91
+end box
+
+== Phase 1 : Dépôt et validation du fichier ==
+
+user -> front : Déposer un fichier\n(glisser-déposer ou sélection)
+activate front
+
+note right of front
+  **Composant : AIExtraction**
+  ─────────────────────────────
+  • Zone de glisser-déposer
+  • Sélection de fichier
+  • Formats : PDF, JPG, PNG,
+    TIFF, BMP, WEBP, XML
+end note
+
+front -> front : Valider le type de fichier\n(extension autorisée)
+
+front -> api : **POST /api/extract-file**\n(multipart/form-data)\nHeaders : Authorization, X-Org-Id\n{ file, lang? }
+activate api
+
+api -> api : @token_required\n@org_required\n@check_plan_limit("invoices")
+
+api -> api : Valider le fichier :\n• Présence du fichier\n• Extension autorisée\n• Nom sécurisé (secure_filename)
+
+alt Fichier invalide
+  api --> front : **400 Bad Request**\n{ error: "Invalid file" }
+  front --> user : Afficher l'erreur
+else Fichier valide
+
+  api -> api : Sauvegarder le fichier\n(YYYYMMDDHHMMSS_filename)
+
+  == Phase 2 : Lancement du traitement ==
+
+  alt Celery + Redis disponibles
+    api -> worker : **process_invoice_task.delay(**\n  user_id, file_path,\n  filename, org_id, lang\n**)**
+    activate worker
+    api --> front : **202 Accepted**\n{ task_id, mode: "async" }
+  else Redis indisponible (fallback)
+    api -> db : Créer la facture provisoire\n{ status: "processing",\n  share_code: "INV-..." }
+    activate db
+    db --> api : invoice_id
+    deactivate db
+    api -> worker : Lancer un **Thread** de\ntraitement en arrière-plan
+    activate worker
+    api --> front : **202 Accepted**\n{ invoice_id, mode: "poll" }
+  end
+  deactivate api
+
+  front -> front : Afficher la barre\nde progression
+  front --> user : « Traitement en cours... »
+
+  note right of front
+    **Interface : Progression**
+    ──────────────────────────
+    • Barre de progression animée
+    • Étapes affichées en temps réel
+    • Polling périodique du statut
+  end note
+
+  == Phase 3 : Traitement par le worker ==
+
+  worker -> db : Créer la facture provisoire\n(si pas déjà créée)\n{ status: "processing" }
+  activate db
+  db --> worker : invoice_id
+  deactivate db
+
+  worker -> extractor : **extract_from_file(**\n  file_path, lang\n**)**
+  activate extractor
+
+  extractor -> extractor : Déterminer le type\nde fichier (extension)
+
+  alt Fichier XML
+    extractor -> extractor : **parse_xml_invoice()**\nExtraction déterministe\ndepuis les balises XML
+    extractor -> extractor : Score de confiance = 100 %
+    note right of extractor
+      Court-circuite la chaîne LLM
+      Pas d'OCR ni d'IA nécessaire
+    end note
+
+  else Fichier image (JPG, PNG, WEBP)
+    extractor -> claude : **Claude Vision API**\nEnvoi direct de l'image en Base64\n(pas d'OCR nécessaire)
+    activate claude
+
+    alt Claude Vision répond
+      claude --> extractor : Données JSON extraites\n(scores de confiance élevés)
+      deactivate claude
+    else Claude indisponible (timeout / quota / erreur)
+      claude --> extractor : Erreur
+      deactivate claude
+
+      note right of extractor
+        **Fallback : OCR + Ollama**
+        Claude Vision indisponible,
+        on extrait le texte par OCR
+        puis on appelle Ollama local
+      end note
+
+      extractor -> extractor : **OCR Tesseract**\n(fra + eng + ara)\nExtraire le texte brut
+      extractor -> ollama : **POST /api/chat**\n{ prompt + texte OCR,\n  format: "json" }
+      activate ollama
+      alt Ollama répond
+        ollama --> extractor : Données JSON extraites
+        deactivate ollama
+      else Ollama indisponible
+        ollama --> extractor : Erreur
+        deactivate ollama
+        extractor -> extractor : **Extraction regex**\n(dates, montants,\nmatricule fiscal)
+      end
+    end
+
+  else Fichier PDF
+    extractor -> extractor : Convertir les pages\nen images (200 DPI)
+    extractor -> claude : **Claude Vision API**\nEnvoi des pages en Base64\n(pas d'OCR nécessaire)
+    activate claude
+
+    alt Claude Vision répond
+      claude --> extractor : Données JSON extraites\n(scores de confiance élevés)
+      deactivate claude
+    else Claude indisponible (timeout / quota / erreur)
+      claude --> extractor : Erreur
+      deactivate claude
+
+      extractor -> extractor : **pdfplumber**\nExtraire le texte natif
+      alt Texte insuffisant (PDF scanné)
+        extractor -> extractor : Convertir en images\n+ OCR Tesseract\n(fra + eng + ara)
+      end
+
+      extractor -> ollama : **POST /api/chat**\n{ prompt + texte extrait,\n  format: "json" }
+      activate ollama
+
+      alt Ollama répond
+        ollama --> extractor : Données JSON extraites
+        deactivate ollama
+      else Ollama indisponible
+        ollama --> extractor : Erreur
+        deactivate ollama
+        extractor -> extractor : **Extraction regex**\n(dates, montants,\nmatricule fiscal)
+      end
+    end
+  end
+
+  == Phase 4 : Post-traitement ==
+
+  extractor -> extractor : Post-traitement :\n• Normaliser les dates\n• Corriger les quantités\n• Fusionner les doublons\n• Calculer les scores\n  de confiance par champ
+
+  extractor -> extractor : **validate_invoice()**\nMoteur de conformité\n(7 familles de contrôles)
+
+  extractor -> extractor : **detect_service_type()**\nClassification biens/services
+
+  extractor -> extractor : Déterminer si vérification\nhumaine nécessaire\n(needs_human_review)
+
+  extractor --> worker : Données extraites +\ncompliance + scores
+  deactivate extractor
+
+  == Phase 5 : Persistance et notification ==
+
+  worker -> db : **invoices.update_one(**\n  { $set: { data, status:\n    "completed",\n    compliance_status,\n    invoice_category } }\n**)**
+  activate db
+  db --> worker : OK
+  deactivate db
+
+  worker -> db : Incrémenter le compteur\nd'utilisation (increment_usage)
+  activate db
+  db --> worker : OK
+  deactivate db
+
+  worker -> db : **activity.insert_one(**\n  { action: "upload",\n    details: { invoice_id,\n      model_used, filename } }\n**)**
+  activate db
+  db --> worker : OK
+  deactivate db
+
+  worker -> worker : **Notification**\nextraction_complete\nou needs_review
+
+  deactivate worker
+
+  == Phase 6 : Récupération du résultat ==
+
+  front -> api : **GET /api/tasks/{task_id}**\nou polling par invoice_id
+  activate api
+  api --> front : **200 OK**\n{ state: "SUCCESS",\n  result: extracted_data }
+  deactivate api
+
+  front -> front : Masquer la barre\nde progression
+  front --> user : Afficher les résultats\navec les scores de confiance\net le statut de conformité
+
+  note right of front
+    **Interface : Résultats**
+    ────────────────────────
+    • Données extraites affichées
+    • Scores de confiance par champ
+      (couleurs : vert/orange/rouge)
+    • Statut de conformité
+    • Badge modèle utilisé
+      (Claude Vision / Ollama)
+    • Bouton « Vérifier » si
+      needs_human_review = true
+  end note
+
+end
+
+deactivate front
+
+@enduml

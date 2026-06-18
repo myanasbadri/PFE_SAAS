@@ -45,71 +45,71 @@ import { getActivityLogs, type ActivityLog } from "@/lib/api";
 
 const ACTION_CONFIG: Record<
   string,
-  { label: string; icon: React.ElementType; color: string; bg: string }
+  { labelKey: string; icon: React.ElementType; color: string; bg: string }
 > = {
   login: {
-    label: "Login",
+    labelKey: "login",
     icon: LogIn,
-    color: "text-blue-600",
-    bg: "bg-blue-50 border-blue-200",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800",
   },
   register: {
-    label: "Registration",
+    labelKey: "registration",
     icon: UserPlus,
-    color: "text-emerald-600",
-    bg: "bg-emerald-50 border-emerald-200",
+    color: "text-emerald-600 dark:text-emerald-400",
+    bg: "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800",
   },
   upload: {
-    label: "Invoice Upload",
+    labelKey: "invoiceUpload",
     icon: Upload,
-    color: "text-violet-600",
-    bg: "bg-violet-50 border-violet-200",
+    color: "text-violet-600 dark:text-violet-400",
+    bg: "bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800",
   },
   update_invoice: {
-    label: "Invoice Update",
+    labelKey: "invoiceUpdate",
     icon: FileEdit,
-    color: "text-amber-600",
-    bg: "bg-amber-50 border-amber-200",
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800",
   },
   export: {
-    label: "Export",
+    labelKey: "export",
     icon: Activity,
-    color: "text-cyan-600",
-    bg: "bg-cyan-50 border-cyan-200",
+    color: "text-cyan-600 dark:text-cyan-400",
+    bg: "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800",
   },
   view_invoice: {
-    label: "Invoice View",
+    labelKey: "invoiceView",
     icon: Activity,
-    color: "text-gray-600",
-    bg: "bg-gray-50 border-gray-200",
+    color: "text-gray-600 dark:text-gray-400",
+    bg: "bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800",
   },
   delete_invoice: {
-    label: "Invoice Delete",
+    labelKey: "invoiceDelete",
     icon: Activity,
-    color: "text-red-600",
-    bg: "bg-red-50 border-red-200",
+    color: "text-red-600 dark:text-red-400",
+    bg: "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800",
   },
   update_profile: {
-    label: "Profile Update",
+    labelKey: "profileUpdate",
     icon: User,
-    color: "text-indigo-600",
-    bg: "bg-indigo-50 border-indigo-200",
+    color: "text-indigo-600 dark:text-indigo-400",
+    bg: "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800",
   },
   advisor_chat: {
-    label: "AI Advisor Chat",
+    labelKey: "aiAdvisorChat",
     icon: Activity,
-    color: "text-emerald-600",
-    bg: "bg-emerald-50 border-emerald-200",
+    color: "text-emerald-600 dark:text-emerald-400",
+    bg: "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800",
   },
 };
 
 function getActionConfig(action: string) {
   return (
     ACTION_CONFIG[action] || {
-      label: action,
+      labelKey: action,
       icon: Activity,
-      color: "text-gray-600",
-      bg: "bg-gray-50 border-gray-200",
+      color: "text-gray-600 dark:text-gray-400",
+      bg: "bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800",
     }
   );
 }
@@ -131,7 +131,7 @@ function formatTimestamp(iso: string): string {
   }
 }
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: (key: string) => string): string {
   if (!iso) return "";
   try {
     const now = Date.now();
@@ -139,25 +139,25 @@ function formatRelativeTime(iso: string): string {
     const diffMs = now - then;
     const diffMin = Math.floor(diffMs / 60000);
 
-    if (diffMin < 1) return "Just now";
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 1) return t("justNow");
+    if (diffMin < 60) return t("minutesAgo").replace("{n}", String(diffMin));
     const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffHr < 24) return t("hoursAgo").replace("{n}", String(diffHr));
     const diffDay = Math.floor(diffHr / 24);
-    if (diffDay < 30) return `${diffDay}d ago`;
-    return `${Math.floor(diffDay / 30)}mo ago`;
+    if (diffDay < 30) return t("daysAgo").replace("{n}", String(diffDay));
+    return t("monthsAgo").replace("{n}", String(Math.floor(diffDay / 30)));
   } catch {
     return "";
   }
 }
 
-function renderDetails(details: Record<string, unknown>): string {
+function renderDetails(details: Record<string, unknown>, t: (key: string) => string): string {
   if (!details || Object.keys(details).length === 0) return "";
   const parts: string[] = [];
-  if (details.email) parts.push(`Email: ${details.email}`);
-  if (details.role) parts.push(`Role: ${details.role}`);
-  if (details.invoice_id) parts.push(`Invoice: ${String(details.invoice_id).slice(0, 8)}`);
-  if (details.method) parts.push(`Method: ${details.method}`);
+  if (details.email) parts.push(`${t("email")}: ${details.email}`);
+  if (details.role) parts.push(`${t("role")}: ${details.role}`);
+  if (details.invoice_id) parts.push(`${t("invoice")}: ${String(details.invoice_id).slice(0, 8)}`);
+  if (details.method) parts.push(`${t("paymentMethod")}: ${details.method}`);
   return parts.join(" | ");
 }
 
@@ -193,11 +193,11 @@ export const AuditTrail = () => {
       setTotalPages(res.pages);
       setTotal(res.total);
     } catch {
-      toast.error("Failed to load activity logs");
+      toast.error(t("failedToLoadLogs"));
     } finally {
       setLoading(false);
     }
-  }, [page, actionFilter, dateFrom, dateTo]);
+  }, [page, actionFilter, dateFrom, dateTo, t]);
 
   useEffect(() => {
     fetchLogs();
@@ -225,8 +225,8 @@ export const AuditTrail = () => {
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             {isAdmin
-              ? "Track all user activity across the system"
-              : "View your recent activity and actions"}
+              ? t("trackAllActivity")
+              : t("viewYourActivity")}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -234,7 +234,7 @@ export const AuditTrail = () => {
             variant="outline"
             className="text-sm border-[#0A2540]/20 text-foreground"
           >
-            {total} {total === 1 ? "event" : "events"}
+            {total} {total === 1 ? t("event") : t("events")}
           </Badge>
           <Button
             variant="outline"
@@ -243,7 +243,7 @@ export const AuditTrail = () => {
             className={`gap-2 ${hasActiveFilters ? "border-[#10B981] text-[#10B981]" : ""}`}
           >
             <Filter className="h-4 w-4" />
-            Filters
+            {t("filters")}
             {hasActiveFilters && (
               <span className="ml-1 h-2 w-2 rounded-full bg-[#10B981]" />
             )}
@@ -258,7 +258,7 @@ export const AuditTrail = () => {
             <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">
-                  Action Type
+                  {t("actionType")}
                 </Label>
                 <Select
                   value={actionFilter}
@@ -268,23 +268,23 @@ export const AuditTrail = () => {
                   }}
                 >
                   <SelectTrigger className="w-[180px] h-9 text-sm">
-                    <SelectValue placeholder="All Actions" />
+                    <SelectValue placeholder={t("allActions")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Actions</SelectItem>
-                    <SelectItem value="login">Login</SelectItem>
-                    <SelectItem value="register">Registration</SelectItem>
-                    <SelectItem value="upload">Invoice Upload</SelectItem>
+                    <SelectItem value="all">{t("allActions")}</SelectItem>
+                    <SelectItem value="login">{t("login")}</SelectItem>
+                    <SelectItem value="register">{t("registration")}</SelectItem>
+                    <SelectItem value="upload">{t("invoiceUpload")}</SelectItem>
                     <SelectItem value="update_invoice">
-                      Invoice Update
+                      {t("invoiceUpdate")}
                     </SelectItem>
-                    <SelectItem value="export">Export</SelectItem>
+                    <SelectItem value="export">{t("export")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">From</Label>
+                <Label className="text-xs text-muted-foreground">{t("dateFrom")}</Label>
                 <Input
                   type="date"
                   value={dateFrom}
@@ -297,7 +297,7 @@ export const AuditTrail = () => {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">To</Label>
+                <Label className="text-xs text-muted-foreground">{t("dateTo")}</Label>
                 <Input
                   type="date"
                   value={dateTo}
@@ -317,7 +317,7 @@ export const AuditTrail = () => {
                   className="text-muted-foreground gap-1.5 h-9"
                 >
                   <X className="h-3.5 w-3.5" />
-                  Clear
+                  {t("clearAll")}
                 </Button>
               )}
             </div>
@@ -328,7 +328,7 @@ export const AuditTrail = () => {
       {/* Activity Table */}
       <Card className="bg-card">
         <CardHeader>
-          <CardTitle className="text-foreground">Activity Log</CardTitle>
+          <CardTitle className="text-foreground">{t("activityLog")}</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -338,11 +338,11 @@ export const AuditTrail = () => {
           ) : logs.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="font-medium">No activity recorded yet</p>
+              <p className="font-medium">{t("noActivityYet")}</p>
               <p className="text-sm mt-1">
                 {hasActiveFilters
-                  ? "Try adjusting your filters"
-                  : "Actions will appear here as you use the system"}
+                  ? t("tryAdjusting")
+                  : t("actionsWillAppear")}
               </p>
             </div>
           ) : (
@@ -351,12 +351,12 @@ export const AuditTrail = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[180px]">Action</TableHead>
-                      {isAdmin && <TableHead>User</TableHead>}
-                      <TableHead>Details</TableHead>
-                      <TableHead className="w-[130px]">IP Address</TableHead>
+                      <TableHead className="w-[180px]">{t("actionType")}</TableHead>
+                      {isAdmin && <TableHead>{t("user")}</TableHead>}
+                      <TableHead>{t("details")}</TableHead>
+                      <TableHead className="w-[130px]">{t("ipAddress")}</TableHead>
                       <TableHead className="w-[200px] text-right">
-                        Time
+                        {t("timestamp")}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -377,7 +377,7 @@ export const AuditTrail = () => {
                                 />
                               </div>
                               <span className="font-medium text-sm">
-                                {config.label}
+                                {t(config.labelKey)}
                               </span>
                             </div>
                           </TableCell>
@@ -404,7 +404,7 @@ export const AuditTrail = () => {
                           {/* Details */}
                           <TableCell>
                             <span className="text-sm text-muted-foreground">
-                              {renderDetails(log.details) || "--"}
+                              {renderDetails(log.details, t) || "--"}
                             </span>
                           </TableCell>
 
@@ -424,7 +424,7 @@ export const AuditTrail = () => {
                                 {formatTimestamp(log.timestamp)}
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                {formatRelativeTime(log.timestamp)}
+                                {formatRelativeTime(log.timestamp, t)}
                               </p>
                             </div>
                           </TableCell>
@@ -439,7 +439,7 @@ export const AuditTrail = () => {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between pt-4 border-t mt-4">
                   <p className="text-sm text-muted-foreground">
-                    Page {page} of {totalPages} ({total} total)
+                    {t("page")} {page} {t("of")} {totalPages} ({total} {t("total")})
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
@@ -450,7 +450,7 @@ export const AuditTrail = () => {
                       className="gap-1"
                     >
                       <ChevronLeft className="h-4 w-4" />
-                      Previous
+                      {t("previous")}
                     </Button>
                     <Button
                       variant="outline"
@@ -459,7 +459,7 @@ export const AuditTrail = () => {
                       onClick={() => setPage((p) => p + 1)}
                       className="gap-1"
                     >
-                      Next
+                      {t("next")}
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>

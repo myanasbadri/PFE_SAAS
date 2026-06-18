@@ -1,0 +1,208 @@
+@startuml Diagramme_Interface_Client_Backend
+title Diagramme de composants — Interface client-serveur
+skinparam backgroundColor #FFFFFF
+skinparam handwritten false
+skinparam shadowing true
+skinparam dpi 200
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 13
+skinparam componentStyle rectangle
+skinparam titleFontSize 18
+
+skinparam component {
+  BackgroundColor #F0F4FF
+  BorderColor #3366CC
+  BorderThickness 2
+  FontColor #0A2540
+}
+
+skinparam package {
+  BackgroundColor #F5F9FF
+  BorderColor #2E75B6
+  BorderThickness 2
+  FontStyle bold
+  RoundCorner 10
+}
+
+skinparam interface {
+  BackgroundColor #2E75B6
+  FontColor #0A2540
+}
+
+skinparam arrow {
+  Color #2C3E50
+  FontColor #2E75B6
+  FontSize 11
+  Thickness 1.5
+}
+
+skinparam note {
+  BackgroundColor #FFF9C4
+  BorderColor #CC9900
+}
+
+' ============================================================
+'  COUCHE CLIENT (Next.js / React)
+' ============================================================
+package "Couche Client — Next.js 16 / React 19 (TypeScript)" as CLIENT #E3F2FD {
+
+  package "Pages (App Router)" as PAGES {
+    component [Authentication\n(Login / Register)] as PageAuth
+    component [Dashboard] as PageDash
+    component [Invoices] as PageInv
+    component [Extraction] as PageExt
+    component [Advisor] as PageAdv
+    component [Settings] as PageSet
+  }
+
+  package "Composants applicatifs (22)" as COMPS {
+    component [AIExtraction] as CmpExt #FFE0B2
+    component [AIAdvisor] as CmpAdv #FFE0B2
+    component [InvoiceManagement] as CmpInv
+    component [InvoiceVerification] as CmpVer
+    component [Dashboard] as CmpDash
+    component [ScanImport] as CmpScan
+    component [NotificationBell] as CmpNotif
+    component [TeamManagement] as CmpTeam
+    component [OrgSettings] as CmpOrg
+    component [Authentication] as CmpAuth
+    component [CompliancePanel] as CmpComp
+  }
+
+  package "Couche d'abstraction API" as APICLIENT {
+    component [api.ts\n(Axios / Fetch)] as ApiLib #C8E6C9
+  }
+
+  package "Contextes React" as CTX {
+    component [LanguageContext\n(fr / en / ar)] as CtxLang
+    component [AuthContext\n(token JWT)] as CtxAuth
+    component [OrgContext\n(org_id courant)] as CtxOrg
+  }
+}
+
+note bottom of APICLIENT
+  **Headers injectés automatiquement :**
+  ─────────────────────────────────────
+  Authorization : Bearer <JWT 24h>
+  X-Org-Id : <identifiant organisation>
+  Content-Type : application/json
+  (ou multipart/form-data pour uploads)
+end note
+
+' ============================================================
+'  INTERFACE REST (contrat API)
+' ============================================================
+interface "API REST\nJSON / multipart" as REST
+
+' ============================================================
+'  COUCHE SERVEUR (Flask)
+' ============================================================
+package "Couche Serveur — Flask / Python 3.10" as SERVER #E8F5E9 {
+
+  package "Décorateurs d'autorisation" as DECOS {
+    component [@token_required] as DecTok #FFF9C4
+    component [@org_required] as DecOrg #FFF9C4
+    component [@org_admin_required] as DecAdmin #FFF9C4
+    component [@check_plan_limit] as DecPlan #FFF9C4
+  }
+
+  package "Points de terminaison (85 endpoints)" as ENDPOINTS {
+    component [/api/auth/**\n(login, register, profile)] as EpAuth
+    component [/api/invoices/**\n(CRUD, filtres, export)] as EpInv
+    component [/api/extract-file\n(upload + extraction)] as EpExt #FFE0B2
+    component [/api/advisor/chat\n(conseiller IA)] as EpAdv #FFE0B2
+    component [/api/organizations/**\n(CRUD, membres, rôles)] as EpOrg
+    component [/api/notifications/**\n(lecture, préférences)] as EpNotif
+    component [/api/invoices/*/qrcode\n(partage QR)] as EpQR
+    component [/api/invoices/import\n(import par code)] as EpImport
+    component [/api/ttn/**\n(soumission El Fatoora)] as EpTTN
+    component [/api/billing/**\n(abonnement Stripe)] as EpBill
+    component [/api/tej/**\n(certificats TEJ)] as EpTej
+  }
+
+  package "Services métier (19 modules)" as SERVICES {
+    component [auth_service] as SvcAuth
+    component [extractor_core] as SvcExt #FFE0B2
+    component [tax_validator] as SvcTax
+    component [service_detector] as SvcDet
+    component [org_service] as SvcOrg
+    component [notification_service] as SvcNotif
+    component [billing_service] as SvcBill
+    component [signature_validator] as SvcSig
+    component [xml_parser] as SvcXml
+    component [qr_share_service] as SvcQR
+  }
+}
+
+' ============================================================
+'  COUCHE DONNÉES
+' ============================================================
+package "Couche Données" as DATA #F3E5F5 {
+  database "MongoDB 7\n(11 collections)" as Mongo
+  database "Redis 7\n(cache + file Celery)" as Redis
+}
+
+' ============================================================
+'  SERVICES EXTERNES
+' ============================================================
+package "Services IA externes" as AIEXT #FFF3E0 {
+  component [Claude Vision API\n(Anthropic)] as Claude #FFCC80
+  component [Ollama local\n(qwen2.5:7b-instruct)] as Ollama #FFAB91
+}
+
+' ============================================================
+'  RELATIONS
+' ============================================================
+
+' Client -> API REST
+ApiLib -down-> REST : HTTPS\nJSON / multipart
+
+' API REST -> Serveur
+REST -down-> DECOS
+
+' Décorateurs -> Endpoints
+DECOS -down-> ENDPOINTS
+
+' Endpoints -> Services
+EpAuth --> SvcAuth
+EpExt --> SvcExt
+EpInv --> SvcExt
+EpAdv --> SvcExt
+EpOrg --> SvcOrg
+EpNotif --> SvcNotif
+EpBill --> SvcBill
+
+' Services -> Données
+SERVICES -down-> Mongo
+SERVICES -down-> Redis
+
+' Services -> IA
+SvcExt -right-> Claude : Vision API\n(pas d'OCR)
+SvcExt -right-> Ollama : OCR + texte\n(fallback)
+
+' Composants -> ApiLib
+CmpExt --> ApiLib
+CmpAdv --> ApiLib
+CmpInv --> ApiLib
+CmpVer --> ApiLib
+CmpDash --> ApiLib
+CmpScan --> ApiLib
+CmpNotif --> ApiLib
+CmpAuth --> ApiLib
+CmpTeam --> ApiLib
+CmpOrg --> ApiLib
+
+' ============================================================
+'  LÉGENDE
+' ============================================================
+legend bottom right
+  <b>Légende</b>
+  |<back:#E3F2FD>       </back>| Couche Client (Next.js) |
+  |<back:#E8F5E9>       </back>| Couche Serveur (Flask) |
+  |<back:#F3E5F5>       </back>| Couche Données |
+  |<back:#FFE0B2>       </back>| Modules IA (extraction / conseiller) |
+  |<back:#FFF9C4>       </back>| Décorateurs d'autorisation |
+  |<back:#FFF3E0>       </back>| Services IA externes |
+endlegend
+
+@enduml

@@ -52,6 +52,9 @@ def register_billing_routes(app, db):
         limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
         prices = PLAN_PRICES.get(plan, PLAN_PRICES["free"])
 
+        # Get live member count from memberships collection
+        actual_members = db["memberships"].count_documents({"org_id": org_id})
+
         # Get subscription status from Stripe if available
         subscription_status = None
         stripe = _get_stripe()
@@ -78,7 +81,7 @@ def register_billing_routes(app, db):
                         "limit": limits.get("max_invoices_per_month", 0),
                     },
                     "members": {
-                        "used": usage.get("members_count", 0),
+                        "used": actual_members,
                         "limit": limits.get("max_members", 0),
                     },
                     "ai_queries": {

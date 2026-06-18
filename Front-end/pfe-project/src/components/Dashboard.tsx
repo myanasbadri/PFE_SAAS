@@ -138,7 +138,7 @@ export const Dashboard = () => {
         <Card className="bg-card border-l-4 border-l-[#10B981] hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Invoice Amount
+              {t("totalAmount")}
             </CardTitle>
             <div className="h-10 w-10 rounded-full bg-[#10B981]/10 flex items-center justify-center">
               <DollarSign className="h-5 w-5 text-[#10B981]" />
@@ -154,7 +154,7 @@ export const Dashboard = () => {
             )}
             <div className="pt-2 border-t border-border/50 mt-2">
               <p className="text-xs text-muted-foreground">
-                Sum of all invoice grand totals
+                {t("totalAmountDesc")}
               </p>
             </div>
           </CardContent>
@@ -164,7 +164,7 @@ export const Dashboard = () => {
         <Card className="bg-card border-l-4 border-l-[#3B82F6] hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Total Invoices
+              {t("totalInvoices")}
             </CardTitle>
             <div className="h-10 w-10 rounded-full bg-[#3B82F6]/10 flex items-center justify-center">
               <FileText className="h-5 w-5 text-[#3B82F6]" />
@@ -180,7 +180,7 @@ export const Dashboard = () => {
             )}
             <div className="pt-2 border-t border-border/50 mt-2">
               <p className="text-xs text-muted-foreground">
-                Processed invoices in the system
+                {t("totalInvoicesDesc")}
               </p>
             </div>
           </CardContent>
@@ -189,7 +189,7 @@ export const Dashboard = () => {
         {/* Needs Review */}
         <Card className="bg-card border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Needs Review</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("needsReview")}</CardTitle>
             <div className="h-10 w-10 rounded-full bg-yellow-500/10 flex items-center justify-center">
               <AlertCircle className="h-5 w-5 text-yellow-500" />
             </div>
@@ -204,7 +204,7 @@ export const Dashboard = () => {
             )}
             <div className="pt-2 border-t border-border/50 mt-2">
               <p className="text-xs text-muted-foreground">
-                Flagged for human review
+                {t("needsReviewDesc")}
               </p>
             </div>
           </CardContent>
@@ -214,7 +214,7 @@ export const Dashboard = () => {
         <Card className="bg-card border-l-4 border-l-[#8B5CF6] hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Avg Invoice Value
+              {t("avgInvoiceValue")}
             </CardTitle>
             <div className="h-10 w-10 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center">
               <BarChart3 className="h-5 w-5 text-[#8B5CF6]" />
@@ -230,7 +230,7 @@ export const Dashboard = () => {
             )}
             <div className="pt-2 border-t border-border/50 mt-2">
               <p className="text-xs text-muted-foreground">
-                Average grand total per invoice
+                {t("avgInvoiceValueDesc")}
               </p>
             </div>
           </CardContent>
@@ -245,16 +245,16 @@ export const Dashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-foreground">
-                  Monthly Invoice Trend
+                  {t("monthlyInvoiceTrend")}
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Invoice amounts over time
+                  {t("monthlyInvoiceTrendDesc")}
                 </p>
               </div>
               {monthlyChartData.length >= 2 && (
                 <Badge className="bg-[#10B981]/10 text-[#10B981] border-0">
                   <TrendingUp className="h-3 w-3 mr-1" />
-                  {monthlyChartData.length} months
+                  {monthlyChartData.length} {t("months")}
                 </Badge>
               )}
             </div>
@@ -266,7 +266,7 @@ export const Dashboard = () => {
               </div>
             ) : monthlyChartData.length === 0 ? (
               <div className="flex items-center justify-center h-[350px] text-muted-foreground">
-                <p>No monthly data yet. Upload invoices to see trends.</p>
+                <p>{t("noMonthlyData")}</p>
               </div>
             ) : (
               <div className="h-[350px] w-full">
@@ -306,8 +306,8 @@ export const Dashboard = () => {
                       }}
                       formatter={(value: number | undefined) =>
                         value != null
-                          ? [fmtCurrency(value), "Amount"]
-                          : ["-", "Amount"]
+                          ? [fmtCurrency(value), t("amount")]
+                          : ["-", t("amount")]
                       }
                     />
                     <Legend />
@@ -318,7 +318,7 @@ export const Dashboard = () => {
                       strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#gradAmount)"
-                      name="Total Amount"
+                      name={t("totalAmount")}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -330,8 +330,8 @@ export const Dashboard = () => {
         {/* Vendor Breakdown Pie – 1 col */}
         <Card className="bg-card">
           <CardHeader>
-            <CardTitle className="text-foreground">Top Vendors</CardTitle>
-            <p className="text-sm text-muted-foreground">By invoice amount</p>
+            <CardTitle className="text-foreground">{t("topVendors")}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t("byInvoiceAmount")}</p>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -341,7 +341,7 @@ export const Dashboard = () => {
             ) : vendorPieData.length === 0 ? (
               <div className="flex items-center justify-center h-[350px] text-muted-foreground">
                 <p className="text-center text-sm">
-                  No vendor data yet
+                  {t("noVendorData")}
                 </p>
               </div>
             ) : (
@@ -400,10 +400,10 @@ export const Dashboard = () => {
         <Card className="bg-card">
           <CardHeader>
             <CardTitle className="text-foreground">
-              Invoice Status Breakdown
+              {t("invoiceStatusBreakdown")}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Distribution by processing status
+              {t("statusDistributionDesc")}
             </p>
           </CardHeader>
           <CardContent>
@@ -413,7 +413,7 @@ export const Dashboard = () => {
               </div>
             ) : statusBarData.length === 0 ? (
               <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                <p>No status data yet</p>
+                <p>{t("noStatusData")}</p>
               </div>
             ) : (
               <div className="h-[300px] w-full">
@@ -432,7 +432,7 @@ export const Dashboard = () => {
                         borderRadius: "8px",
                       }}
                     />
-                    <Bar dataKey="count" name="Invoices" radius={[8, 8, 0, 0]}>
+                    <Bar dataKey="count" name={t("invoices")} radius={[8, 8, 0, 0]}>
                       {statusBarData.map((entry, i) => (
                         <Cell key={`bar-${i}`} fill={entry.fill} />
                       ))}
@@ -450,10 +450,10 @@ export const Dashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-foreground">
-                  Recent Invoices
+                  {t("recentInvoices")}
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Latest processed invoices
+                  {t("latestProcessedInvoices")}
                 </p>
               </div>
               <FileText className="h-5 w-5 text-muted-foreground" />
@@ -466,7 +466,7 @@ export const Dashboard = () => {
               </div>
             ) : recentInvoices.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
-                No invoices yet
+                {t("noInvoicesYet")}
               </p>
             ) : (
               <div className="space-y-4">
@@ -526,10 +526,10 @@ export const Dashboard = () => {
         <Card className="bg-card lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-foreground">
-              Monthly Invoice Volume
+              {t("monthlyInvoiceVolume")}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Number of invoices processed per month
+              {t("monthlyVolumeDesc")}
             </p>
           </CardHeader>
           <CardContent>
@@ -539,7 +539,7 @@ export const Dashboard = () => {
               </div>
             ) : monthlyChartData.length === 0 ? (
               <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                <p>No data yet</p>
+                <p>{t("noData")}</p>
               </div>
             ) : (
               <div className="h-[300px] w-full">
@@ -562,7 +562,7 @@ export const Dashboard = () => {
                     <Bar
                       dataKey="count"
                       fill="#3B82F6"
-                      name="Invoices"
+                      name={t("invoices")}
                       radius={[8, 8, 0, 0]}
                     />
                   </BarChart>
@@ -580,35 +580,35 @@ export const Dashboard = () => {
                 <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <div>
-                <CardTitle className="text-white">Quick Stats</CardTitle>
-                <p className="text-sm text-white/70">Real-time summary</p>
+                <CardTitle className="text-white">{t("quickStats")}</CardTitle>
+                <p className="text-sm text-white/70">{t("realTimeSummary")}</p>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="bg-card/10 rounded-lg p-4 backdrop-blur-sm">
-                <p className="text-sm text-white/70 mb-1">Total Processed</p>
+                <p className="text-sm text-white/70 mb-1">{t("totalProcessed")}</p>
                 <p className="text-2xl font-bold text-white">
                   {loading ? "..." : totalInvoices}
                 </p>
                 <p className="text-xs text-white/60 mt-1">
-                  invoices in the system
+                  {t("invoicesInSystem")}
                 </p>
               </div>
               <div className="bg-card/10 rounded-lg p-4 backdrop-blur-sm">
-                <p className="text-sm text-white/70 mb-1">Review Rate</p>
+                <p className="text-sm text-white/70 mb-1">{t("reviewRate")}</p>
                 <p className="text-2xl font-bold text-[#10B981]">
                   {loading || totalInvoices === 0
                     ? "--"
                     : `${Math.round((needsReview / totalInvoices) * 100)}%`}
                 </p>
                 <p className="text-xs text-white/60 mt-1">
-                  invoices flagged for review
+                  {t("invoicesFlaggedReview")}
                 </p>
               </div>
               <div className="bg-card/10 rounded-lg p-4 backdrop-blur-sm">
-                <p className="text-sm text-white/70 mb-1">Top Vendor</p>
+                <p className="text-sm text-white/70 mb-1">{t("topVendor")}</p>
                 <p className="text-lg font-bold text-white truncate">
                   {loading || vendorBreakdown.length === 0
                     ? "--"
@@ -617,7 +617,7 @@ export const Dashboard = () => {
                 <p className="text-xs text-white/60 mt-1">
                   {vendorBreakdown.length > 0
                     ? fmtCurrency(vendorBreakdown[0].total)
-                    : "no data"}
+                    : t("noData")}
                 </p>
               </div>
             </div>

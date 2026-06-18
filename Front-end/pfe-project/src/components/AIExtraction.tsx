@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -59,6 +60,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { useLanguage } from "../contexts/LanguageContext";
+import { CURRENCIES } from "@/lib/currencies";
 import {
   Select,
   SelectContent,
@@ -70,12 +72,14 @@ import {
   extractFile,
   extractBatchFiles,
   getTaskStatus,
+  getInvoiceById,
   updateInvoice,
   ApiError,
   type Invoice,
   type BatchFileResult,
 } from "@/lib/api";
 import { toast } from "sonner";
+import InvoiceVerification from "./InvoiceVerification";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -97,12 +101,12 @@ type ProcessingStep =
   | "done"
   | "error";
 
-const STEPS: { key: ProcessingStep; label: string; icon: React.ElementType }[] =
+const STEPS: { key: ProcessingStep; labelKey: string; icon: React.ElementType }[] =
   [
-    { key: "uploading", label: "Uploading File", icon: Upload },
-    { key: "ocr", label: "OCR Processing", icon: ScanSearch },
-    { key: "ai", label: "AI Extraction", icon: BrainCircuit },
-    { key: "validating", label: "Validation", icon: ShieldCheck },
+    { key: "uploading", labelKey: "uploadingFile", icon: Upload },
+    { key: "ocr", labelKey: "ocrProcessing", icon: ScanSearch },
+    { key: "ai", labelKey: "aiExtractionStep", icon: BrainCircuit },
+    { key: "validating", labelKey: "validationStep", icon: ShieldCheck },
   ];
 
 // Batch queue item
@@ -143,12 +147,12 @@ function getConfidenceBg(confidence: number) {
   return "bg-red-500";
 }
 
-function getConfidenceLabel(confidence: number) {
-  if (confidence >= 90) return "Excellent";
-  if (confidence >= 80) return "High";
-  if (confidence >= 60) return "Medium";
-  if (confidence >= 40) return "Low";
-  return "Very Low";
+function getConfidenceLabelKey(confidence: number) {
+  if (confidence >= 90) return "confidenceExcellent";
+  if (confidence >= 80) return "confidenceHigh";
+  if (confidence >= 60) return "confidenceMedium";
+  if (confidence >= 40) return "confidenceLow";
+  return "confidenceVeryLow";
 }
 
 function FieldConfidenceBadge({ score }: { score: number | undefined }) {
@@ -175,6 +179,7 @@ let batchIdCounter = 0;
 
 export const AIExtraction = () => {
   const { t } = useLanguage();
+  const router = useRouter();
 
   // Mode: "single" or "batch"
   const [mode, setMode] = useState<"single" | "batch">("single");
@@ -191,6 +196,9 @@ export const AIExtraction = () => {
   const [data, setData] = useState<ExtractionData | null>(null);
   const [editableData, setEditableData] = useState<ExtractionData | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // ── Verification mode ─────────────────────────────────────────────────
+  const [verificationOpen, setVerificationOpen] = useState(false);
 
   // ── Batch state ────────────────────────────────────────────────────────
   const [batchQueue, setBatchQueue] = useState<BatchItem[]>([]);
@@ -330,7 +338,7 @@ export const AIExtraction = () => {
                   error: r.error,
                 };
               } else {
-                updated[i] = { ...updated[i], status: "failed", progress: 100, error: "No result from server" };
+                updated[i] = { ...updated[i], status: "failed", progress: 100, error: t("noResultFromServer") };
               }
             }
             return updated;
@@ -340,7 +348,7 @@ export const AIExtraction = () => {
             (r) => r.status === "completed",
           ).length;
           toast.success(
-            `Batch complete: ${successCount}/${res.total} files processed`,
+            t("batchCompleteToast").replace("{success}", String(successCount)).replace("{total}", String(res.total)),
           );
         } catch (err) {
           setBatchQueue((prev) =>
@@ -351,10 +359,10 @@ export const AIExtraction = () => {
               error:
                 err instanceof ApiError
                   ? err.message
-                  : "Batch processing failed",
+                  : t("batchFailed"),
             })),
           );
-          toast.error("Batch processing failed");
+          toast.error(t("batchFailed"));
         } finally {
           setBatchProcessing(false);
         }
@@ -384,11 +392,41 @@ export const AIExtraction = () => {
           if (res.mode === "sync") {
             extractedData = res.extracted_data;
             resultInvoiceId = res.invoice_id;
+          } else if (res.mode === "poll") {
+            // No Redis — backend processes in background thread.
+            // Poll the invoice endpoint until status is "completed".
+            setCurrentStep("ai");
+            setProgressPercent(60);
+            resultInvoiceId = res.invoice_id;
+
+            const maxAttempts = 120;
+            for (let i = 0; i < maxAttempts; i++) {
+              await new Promise((r) => setTimeout(r, 2000));
+              try {
+                const invoiceRes = await getInvoiceById(res.invoice_id);
+                const inv = invoiceRes.invoice;
+                if (inv?.status === "completed" && inv.data && Object.keys(inv.data).length > 0) {
+                  extractedData = inv.data;
+                  break;
+                }
+                if (inv?.status === "failed") {
+                  throw new Error(t("processingFailedOnServer"));
+                }
+              } catch (e) {
+                if (e instanceof Error && e.message === t("processingFailedOnServer")) throw e;
+              }
+              setProgressPercent(Math.min(60 + i * 0.25, 88));
+            }
+
+            if (!extractedData) {
+              throw new Error(t("processingTimedOut"));
+            }
           } else {
+            // mode === "async" — Celery/Redis path, poll task status
             setCurrentStep("ai");
             setProgressPercent(60);
 
-            const maxAttempts = 60;
+            const maxAttempts = 120;
             for (let i = 0; i < maxAttempts; i++) {
               await new Promise((r) => setTimeout(r, 2000));
               const taskRes = await getTaskStatus(res.task_id);
@@ -400,14 +438,14 @@ export const AIExtraction = () => {
               }
               if (taskRes.state === "FAILURE") {
                 throw new Error(
-                  taskRes.status || "Processing failed on server",
+                  taskRes.status || t("processingFailedOnServer"),
                 );
               }
-              setProgressPercent(Math.min(60 + i * 0.5, 88));
+              setProgressPercent(Math.min(60 + i * 0.25, 88));
             }
 
             if (!extractedData) {
-              throw new Error("Processing timed out. Please try again.");
+              throw new Error(t("processingTimedOut"));
             }
           }
 
@@ -416,7 +454,8 @@ export const AIExtraction = () => {
           setInvoiceId(resultInvoiceId || null);
           setData(extractedData || {});
           setEditableData(structuredClone(extractedData || {}));
-          toast.success("Invoice data extracted successfully!");
+          setVerificationOpen(true);
+          toast.success(t("invoiceExtractedSuccess"));
         } catch (err) {
           setCurrentStep("error");
           setProgressPercent(0);
@@ -426,10 +465,10 @@ export const AIExtraction = () => {
             setError(err.message);
           } else {
             setError(
-              "Failed to process file. Make sure the backend is running.",
+              t("failedToProcessFile"),
             );
           }
-          toast.error("Extraction failed");
+          toast.error(t("extractionFailed"));
         }
       }
     },
@@ -509,6 +548,7 @@ export const AIExtraction = () => {
     setBatchQueue([]);
     setBatchProcessing(false);
     setSelectedBatchItem(null);
+    setVerificationOpen(false);
   };
 
   // ── Save handler ──────────────────────────────────────────────────────
@@ -521,13 +561,13 @@ export const AIExtraction = () => {
         data: editableData,
         status: "reviewed",
       });
-      setData(structuredClone(editableData));
-      toast.success("Invoice saved successfully!");
+      toast.success(t("invoiceSavedSuccess"));
+      router.push("/invoices");
     } catch (err) {
       if (err instanceof ApiError) {
         toast.error(err.message);
       } else {
-        toast.error("Failed to save. Make sure the backend is running.");
+        toast.error(t("failedToSave"));
       }
     } finally {
       setIsSaving(false);
@@ -542,6 +582,7 @@ export const AIExtraction = () => {
     setInvoiceId(item.invoiceId || null);
     setData(item.extractedData);
     setEditableData(structuredClone(item.extractedData));
+    setVerificationOpen(true);
   };
 
   // ── Editable field helpers ────────────────────────────────────────────
@@ -632,6 +673,42 @@ export const AIExtraction = () => {
 
   // ── Render ────────────────────────────────────────────────────────────
 
+  // ── Full-screen Verification Mode ────────────────────────────────────
+  if (verificationOpen && data && editableData) {
+    return (
+      <div className="space-y-4">
+        {/* Compact header for verification mode */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              {t("aiExtraction")}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("verifyAndCorrect") || "Verify and correct the extracted invoice data"}
+            </p>
+          </div>
+          <Button variant="outline" onClick={handleReset} className="gap-2">
+            <RotateCcw className="h-4 w-4" />
+            {t("newExtraction")}
+          </Button>
+        </div>
+
+        <InvoiceVerification
+          file={uploadedFile}
+          data={data}
+          editableData={editableData}
+          invoiceId={invoiceId}
+          isSaving={isSaving}
+          onFieldChange={updateField}
+          onLineItemChange={updateLineItem}
+          onLineItemRemove={removeLineItem}
+          onSave={handleSave}
+          onCancel={() => setVerificationOpen(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -641,8 +718,7 @@ export const AIExtraction = () => {
             {t("aiExtraction")}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Upload invoices (single, multiple, or ZIP) and let AI extract all
-            data
+            {t("uploadInvoicesDescription")}
           </p>
         </div>
         {(isDone ||
@@ -651,7 +727,7 @@ export const AIExtraction = () => {
           (uploadedFile || batchQueue.length > 0) && (
             <Button variant="outline" onClick={handleReset} className="gap-2">
               <RotateCcw className="h-4 w-4" />
-              New Extraction
+              {t("newExtraction")}
             </Button>
           )}
       </div>
@@ -668,13 +744,13 @@ export const AIExtraction = () => {
                     {t("uploadInvoice")}
                   </CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    PDF, PNG, JPG, WEBP, TXT, XML, or ZIP
+                    {t("supportedFormats")}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="h-4 w-4 text-[#10B981]" />
                   <span className="text-xs font-medium text-[#10B981]">
-                    AI-Powered
+                    {t("aiPowered")}
                   </span>
                 </div>
               </div>
@@ -699,8 +775,8 @@ export const AIExtraction = () => {
                     </div>
                     <p className="text-sm font-medium text-[#10B981]">
                       {batchProcessing
-                        ? `Processing ${batchTotal} file(s)...`
-                        : "Processing..."}
+                        ? t("processingFiles").replace("{n}", String(batchTotal))
+                        : t("processing") + "..."}
                     </p>
                   </div>
                 ) : (isDone && uploadedFile) ||
@@ -710,10 +786,10 @@ export const AIExtraction = () => {
                       <CheckCircle2 className="h-7 w-7 text-[#10B981]" />
                     </div>
                     <p className="text-sm font-medium text-[#10B981]">
-                      Extraction Complete
+                      {t("extractionComplete")}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Drop new files to extract again
+                      {t("dropNewFiles")}
                     </p>
                   </div>
                 ) : (
@@ -726,7 +802,7 @@ export const AIExtraction = () => {
                     <div className="text-center">
                       <p className="font-medium text-sm">{t("dragDrop")}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        or click to browse - supports multiple files &amp; ZIP
+                        {t("clickToBrowse")}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
@@ -735,14 +811,14 @@ export const AIExtraction = () => {
                         className="text-xs gap-1 text-muted-foreground"
                       >
                         <Files className="h-3 w-3" />
-                        Multi-file
+                        {t("multiFile")}
                       </Badge>
                       <Badge
                         variant="outline"
                         className="text-xs gap-1 text-muted-foreground"
                       >
                         <FileArchive className="h-3 w-3" />
-                        ZIP support
+                        {t("zipSupport")}
                       </Badge>
                     </div>
                   </div>
@@ -788,9 +864,9 @@ export const AIExtraction = () => {
 
               {/* Error (single mode) */}
               {mode === "single" && error && (
-                <div className="mt-4 flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="mt-4 flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                   <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-red-700">{error}</p>
+                  <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
                 </div>
               )}
             </CardContent>
@@ -802,17 +878,17 @@ export const AIExtraction = () => {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium text-foreground">
-                    Batch Queue
+                    {t("batchQueue")}
                   </CardTitle>
                   <div className="flex items-center gap-2">
                     {batchProcessing && (
                       <Loader2 className="h-4 w-4 animate-spin text-[#10B981]" />
                     )}
                     <Badge variant="outline" className="text-xs">
-                      {batchCompleted}/{batchTotal} done
+                      {batchCompleted}/{batchTotal} {t("completed").toLowerCase()}
                       {batchFailed > 0 && (
                         <span className="text-red-500 ml-1">
-                          ({batchFailed} failed)
+                          ({batchFailed} {t("failed").toLowerCase()})
                         </span>
                       )}
                     </Badge>
@@ -860,9 +936,9 @@ export const AIExtraction = () => {
                               item.status === "completed"
                                 ? "bg-[#10B981]/10"
                                 : item.status === "failed"
-                                  ? "bg-red-50"
+                                  ? "bg-red-50 dark:bg-red-900/20"
                                   : item.status === "processing"
-                                    ? "bg-blue-50"
+                                    ? "bg-blue-50 dark:bg-blue-900/20"
                                     : "bg-muted/50"
                             }`}
                           >
@@ -915,19 +991,19 @@ export const AIExtraction = () => {
                               item.status === "completed"
                                 ? "bg-[#10B981]/10 text-[#10B981] border-0"
                                 : item.status === "failed"
-                                  ? "bg-red-50 text-red-500 border-0"
+                                  ? "bg-red-50 dark:bg-red-900/20 text-red-500 border-0"
                                   : item.status === "processing"
-                                    ? "bg-blue-50 text-blue-500 border-0"
+                                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-500 border-0"
                                     : "bg-muted text-muted-foreground border-0"
                             }`}
                           >
                             {item.status === "completed"
-                              ? "Done"
+                              ? t("completed")
                               : item.status === "failed"
-                                ? "Failed"
+                                ? t("failed")
                                 : item.status === "processing"
-                                  ? "Processing"
-                                  : "Queued"}
+                                  ? t("processing")
+                                  : t("queued")}
                           </Badge>
                         </div>
                       );
@@ -937,7 +1013,7 @@ export const AIExtraction = () => {
 
                 {!batchProcessing && batchCompleted > 0 && !selectedBatchItem && (
                   <p className="text-xs text-muted-foreground mt-3 text-center">
-                    Click a completed file to view extracted data
+                    {t("clickCompletedFile")}
                   </p>
                 )}
               </CardContent>
@@ -971,7 +1047,7 @@ export const AIExtraction = () => {
                   {isDone && (
                     <Badge className="bg-[#10B981]/10 text-[#10B981] border-0">
                       <Check className="h-3 w-3 mr-1" />
-                      Done
+                      {t("completed")}
                     </Badge>
                   )}
                 </div>
@@ -984,7 +1060,7 @@ export const AIExtraction = () => {
             <Card className="bg-card">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-foreground">
-                  Processing Pipeline
+                  {t("processingPipeline")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1029,11 +1105,11 @@ export const AIExtraction = () => {
                                 : "text-muted-foreground"
                           }`}
                         >
-                          {step.label}
+                          {t(step.labelKey)}
                         </span>
                         {isActive && (
                           <span className="text-xs text-muted-foreground ml-auto">
-                            In progress...
+                            {t("inProgress")}
                           </span>
                         )}
                       </div>
@@ -1051,7 +1127,7 @@ export const AIExtraction = () => {
               <Card className="bg-card">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-foreground">
-                    Extraction Quality
+                    {t("extractionQuality")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1061,7 +1137,7 @@ export const AIExtraction = () => {
                         className={`h-5 w-5 ${getConfidenceColor(confidence)}`}
                       />
                       <span className="text-sm font-medium">
-                        AI Confidence
+                        {t("aiConfidence")}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1073,7 +1149,7 @@ export const AIExtraction = () => {
                       <Badge
                         className={`${getConfidenceBg(confidence)} text-white border-0 text-xs`}
                       >
-                        {getConfidenceLabel(confidence)}
+                        {t(getConfidenceLabelKey(confidence))}
                       </Badge>
                     </div>
                   </div>
@@ -1091,14 +1167,14 @@ export const AIExtraction = () => {
                         <>
                           <ShieldCheck className="h-4 w-4 text-[#10B981]" />
                           <span className="text-sm text-[#10B981] font-medium">
-                            Valid Invoice
+                            {t("validInvoice")}
                           </span>
                         </>
                       ) : (
                         <>
                           <ShieldAlert className="h-4 w-4 text-red-500" />
                           <span className="text-sm text-red-500 font-medium">
-                            Validation Issues
+                            {t("validationIssues")}
                           </span>
                         </>
                       )}
@@ -1108,8 +1184,7 @@ export const AIExtraction = () => {
                       <div className="flex items-start gap-2 p-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/40 rounded-lg">
                         <Eye className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-yellow-700 dark:text-yellow-300">
-                          This invoice needs human review. Some fields may be
-                          missing or inaccurate.
+                          {t("needsHumanReview")}
                         </p>
                       </div>
                     )}
@@ -1146,8 +1221,7 @@ export const AIExtraction = () => {
                   {t("extractedData")}
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md">
-                  Upload invoice files to see extracted data here. Supports
-                  single files, multiple files, and ZIP archives.
+                  {t("uploadToSeeData")}
                 </p>
                 <div className="flex items-center gap-3 mt-6">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1156,7 +1230,7 @@ export const AIExtraction = () => {
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Image className="h-4 w-4" />
-                    Images
+                    {t("images")}
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <FileArchive className="h-4 w-4" />
@@ -1170,21 +1244,21 @@ export const AIExtraction = () => {
               <CardContent className="flex flex-col items-center justify-center h-full min-h-[500px]">
                 <Loader2 className="h-12 w-12 text-[#10B981] animate-spin mb-4" />
                 <p className="text-sm font-medium text-muted-foreground">
-                  Extracting invoice data...
+                  {t("extractingData")}
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  This may take a few moments
+                  {t("mayTakeMoments")}
                 </p>
               </CardContent>
             </Card>
           ) : mode === "single" && currentStep === "error" ? (
             <Card className="bg-card h-full">
               <CardContent className="flex flex-col items-center justify-center h-full min-h-[500px] text-center">
-                <div className="h-20 w-20 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
+                <div className="h-20 w-20 rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mb-4">
                   <XCircle className="h-10 w-10 text-red-400" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">
-                  Extraction Failed
+                  {t("extractionFailed")}
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md mb-4">
                   {error}
@@ -1195,7 +1269,7 @@ export const AIExtraction = () => {
                   className="gap-2"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Try Again
+                  {t("tryAgain")}
                 </Button>
               </CardContent>
             </Card>
@@ -1207,10 +1281,10 @@ export const AIExtraction = () => {
                   <>
                     <Loader2 className="h-12 w-12 text-[#10B981] animate-spin mb-4" />
                     <p className="text-sm font-medium text-muted-foreground">
-                      Processing {batchTotal} file(s)...
+                      {t("processingFiles").replace("{n}", String(batchTotal))}
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Results will appear in the batch queue
+                      {t("resultsInQueue")}
                     </p>
                   </>
                 ) : (
@@ -1219,13 +1293,12 @@ export const AIExtraction = () => {
                       <Files className="h-10 w-10 text-[#10B981]" />
                     </div>
                     <h3 className="text-lg font-semibold text-foreground mb-2">
-                      Batch Processing Complete
+                      {t("batchComplete")}
                     </h3>
                     <p className="text-sm text-muted-foreground max-w-md">
-                      {batchCompleted} of {batchTotal} files processed
-                      successfully.
+                      {t("batchProcessedCount").replace("{completed}", String(batchCompleted)).replace("{total}", String(batchTotal))}
                       {batchCompleted > 0 &&
-                        " Click a completed file in the queue to review its data."}
+                        " " + t("clickCompletedFile")}
                     </p>
                   </>
                 )}
@@ -1241,18 +1314,18 @@ export const AIExtraction = () => {
                       {t("extractedData")}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Review and edit the extracted information before saving
+                      {t("reviewBeforeSaving")}
                     </p>
                   </div>
                   {editableData.validation?.is_valid ? (
                     <Badge className="bg-[#10B981]/10 text-[#10B981] border-0 gap-1">
                       <CheckCircle2 className="h-3 w-3" />
-                      Valid
+                      {t("validInvoice")}
                     </Badge>
                   ) : (
                     <Badge className="bg-yellow-500/10 text-yellow-600 border-0 gap-1">
                       <AlertCircle className="h-3 w-3" />
-                      Review
+                      {t("review")}
                     </Badge>
                   )}
                 </div>
@@ -1266,13 +1339,13 @@ export const AIExtraction = () => {
                       <div className="flex items-center gap-2 mb-3">
                         <Hash className="h-4 w-4 text-foreground" />
                         <h3 className="text-sm font-semibold text-foreground">
-                          Invoice Details
+                          {t("invoiceDetails")}
                         </h3>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                            Invoice Number
+                            {t("invoiceNo")}
                             <FieldConfidenceBadge score={fc?.invoice_no} />
                           </Label>
                           <Input
@@ -1286,22 +1359,29 @@ export const AIExtraction = () => {
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-                            Currency
+                            {t("currency")}
                             <FieldConfidenceBadge score={fc?.currency} />
                           </Label>
-                          <Input
+                          <Select
                             value={editableData.totals?.currency || ""}
-                            onChange={(e) =>
-                              updateField("totals.currency", e.target.value)
-                            }
-                            placeholder="e.g. USD"
-                            className="h-9 text-sm"
-                          />
+                            onValueChange={(v) => updateField("totals.currency", v)}
+                          >
+                            <SelectTrigger className="h-9 text-sm">
+                              <SelectValue placeholder="Select currency" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[300px]">
+                              {CURRENCIES.map((c) => (
+                                <SelectItem key={c.code} value={c.code}>
+                                  {c.code} ({c.symbol})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground flex items-center gap-1">
                             <CalendarDays className="h-3 w-3" />
-                            Invoice Date
+                            {t("invoiceDateLabel")}
                             <FieldConfidenceBadge score={fc?.date} />
                           </Label>
                           <Input
@@ -1316,7 +1396,7 @@ export const AIExtraction = () => {
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            Due Date
+                            {t("dueDate")}
                             <FieldConfidenceBadge score={fc?.due_date} />
                           </Label>
                           <Input
@@ -1338,12 +1418,12 @@ export const AIExtraction = () => {
                       <div className="flex items-center gap-2 mb-3">
                         <Building2 className="h-4 w-4 text-foreground" />
                         <h3 className="text-sm font-semibold text-foreground">
-                          Vendor (From)
+                          {t("vendorFrom")}
                         </h3>
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                          Vendor / Supplier Name
+                          {t("vendorName")}
                           <FieldConfidenceBadge score={fc?.vendor_name} />
                         </Label>
                         <Input
@@ -1364,14 +1444,14 @@ export const AIExtraction = () => {
                       <div className="flex items-center gap-2 mb-3">
                         <User className="h-4 w-4 text-foreground" />
                         <h3 className="text-sm font-semibold text-foreground">
-                          Bill To (Customer)
+                          {t("billTo")}
                         </h3>
                         <FieldConfidenceBadge score={fc?.bill_to} />
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground">
-                            Name
+                            {t("name")}
                           </Label>
                           <Input
                             value={editableData.bill_to?.name || ""}
@@ -1384,7 +1464,7 @@ export const AIExtraction = () => {
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground">
-                            Email
+                            {t("email")}
                           </Label>
                           <Input
                             value={editableData.bill_to?.email || ""}
@@ -1397,7 +1477,7 @@ export const AIExtraction = () => {
                         </div>
                         <div className="sm:col-span-2 space-y-1.5">
                           <Label className="text-xs text-muted-foreground">
-                            Address
+                            {t("address")}
                           </Label>
                           <Input
                             value={editableData.bill_to?.address || ""}
@@ -1419,7 +1499,7 @@ export const AIExtraction = () => {
                         <div className="flex items-center gap-2">
                           <Package className="h-4 w-4 text-foreground" />
                           <h3 className="text-sm font-semibold text-foreground">
-                            Line Items
+                            {t("lineItems")}
                           </h3>
                           <FieldConfidenceBadge score={fc?.line_items} />
                           {editableData.line_items &&
@@ -1441,16 +1521,16 @@ export const AIExtraction = () => {
                             <TableHeader>
                               <TableRow className="bg-muted/30">
                                 <TableHead className="text-xs font-medium">
-                                  Description
+                                  {t("description")}
                                 </TableHead>
                                 <TableHead className="text-xs font-medium w-[80px] text-right">
-                                  Qty
+                                  {t("qty")}
                                 </TableHead>
                                 <TableHead className="text-xs font-medium w-[100px] text-right">
-                                  Unit Price
+                                  {t("unitPrice")}
                                 </TableHead>
                                 <TableHead className="text-xs font-medium w-[100px] text-right">
-                                  Total
+                                  {t("totals")}
                                 </TableHead>
                                 <TableHead className="w-[40px]" />
                               </TableRow>
@@ -1527,7 +1607,7 @@ export const AIExtraction = () => {
                         </div>
                       ) : (
                         <div className="border rounded-lg p-6 text-center text-sm text-muted-foreground">
-                          No line items extracted
+                          {t("noLineItems")}
                         </div>
                       )}
                     </section>
@@ -1539,13 +1619,13 @@ export const AIExtraction = () => {
                       <div className="flex items-center gap-2 mb-3">
                         <Receipt className="h-4 w-4 text-foreground" />
                         <h3 className="text-sm font-semibold text-foreground">
-                          Totals
+                          {t("totals")}
                         </h3>
                       </div>
                       <div className="bg-muted/20 rounded-lg p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs text-muted-foreground">
-                            Subtotal
+                            {t("subtotal")}
                           </Label>
                           <Input
                             value={editableData.totals?.subtotal ?? ""}
@@ -1563,7 +1643,7 @@ export const AIExtraction = () => {
                         </div>
                         <div className="flex items-center justify-between">
                           <Label className="text-xs text-muted-foreground">
-                            Tax
+                            {t("tax")}
                           </Label>
                           <Input
                             value={editableData.totals?.tax ?? ""}
@@ -1581,7 +1661,7 @@ export const AIExtraction = () => {
                         </div>
                         <div className="flex items-center justify-between">
                           <Label className="text-xs text-muted-foreground">
-                            Discount
+                            {t("discount")}
                           </Label>
                           <Input
                             value={editableData.totals?.discount ?? ""}
@@ -1600,7 +1680,7 @@ export const AIExtraction = () => {
                         <Separator />
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-semibold text-foreground flex items-center gap-1">
-                            Grand Total
+                            {t("grandTotal")}
                             <FieldConfidenceBadge score={fc?.grand_total} />
                           </Label>
                           <Input
@@ -1628,7 +1708,7 @@ export const AIExtraction = () => {
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground flex items-center gap-1">
                             <CreditCard className="h-3 w-3" />
-                            Payment Method
+                            {t("paymentMethod")}
                             <FieldConfidenceBadge score={fc?.payment_method} />
                           </Label>
                           <Input
@@ -1643,7 +1723,7 @@ export const AIExtraction = () => {
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground flex items-center gap-1">
                             <StickyNote className="h-3 w-3" />
-                            Notes
+                            {t("notes")}
                             <FieldConfidenceBadge score={fc?.notes} />
                           </Label>
                           <Input
@@ -1666,8 +1746,8 @@ export const AIExtraction = () => {
                 <div className="pt-4 mt-4 border-t flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
                     {invoiceId
-                      ? "All changes are local until you save"
-                      : "No invoice ID -- data was already saved during extraction"}
+                      ? t("changesLocalUntilSave")
+                      : t("noInvoiceIdSaved")}
                   </p>
                   <Button
                     onClick={handleSave}
@@ -1679,7 +1759,7 @@ export const AIExtraction = () => {
                     ) : (
                       <Check className="h-4 w-4" />
                     )}
-                    {isSaving ? "Saving..." : t("saveInvoice")}
+                    {isSaving ? t("saving") : t("saveInvoice")}
                   </Button>
                 </div>
               </CardContent>

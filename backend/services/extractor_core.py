@@ -1,29 +1,30 @@
 import os
 import json
 import re
+import base64
 import logging
 from datetime import datetime
 from dateutil import parser as dateutil_parser
 
 import requests
 
-from config import OLLAMA_URL, OLLAMA_MODEL, GROQ_API_KEY, GROQ_MODEL
+from config import OLLAMA_URL, OLLAMA_MODEL, ANTHROPIC_API_KEY, CLAUDE_MODEL
 from services.pdf_service import extract_text_from_pdf
 from services.image_service import extract_text_from_image
 
 logger = logging.getLogger(__name__)
 
-# ── Groq client singleton ─────────────────────────────────────────────────────
-_groq_client = None
+# ── Anthropic client singleton ────────────────────────────────────────────────
+_anthropic_client = None
 
-def _get_groq_client():
-    global _groq_client
-    if _groq_client is None:
-        if not GROQ_API_KEY:
+def _get_anthropic_client():
+    global _anthropic_client
+    if _anthropic_client is None:
+        if not ANTHROPIC_API_KEY:
             return None
-        from groq import Groq
-        _groq_client = Groq(api_key=GROQ_API_KEY)
-    return _groq_client
+        import anthropic
+        _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    return _anthropic_client
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ Rules:
 - bill_to.name is who RECEIVES the invoice (the buyer/client). NEVER use labels like "Bill To", "Ship To", "Facturé à", "العميل" as the name — extract the actual person or company name.
 - invoice_no: extract only the number/code, strip labels like "Invoice #", "Facture N°", "رقم الفاتورة", "Ref:", etc.
 - Dates MUST be YYYY-MM-DD. Examples: "March 7, 2013" → "2013-03-07", "07/03/2024" (French DD/MM) → "2024-03-07", "٧ مارس ٢٠٢٤" → "2024-03-07". null only if truly unparseable.
-- currency: detect from symbols ($→USD, €→EUR, £→GBP, د.ت→TND, DT→TND, DA→DZD, DH→MAD, ر.س→SAR, د.إ→AED) or explicit text. For Tunisian invoices, default to TND.
+- currency: detect from symbols ($→USD, €→EUR, £→GBP, ¥→JPY/CNY, ₹→INR, ₩→KRW, ₺→TRY, ₽→RUB, ₴→UAH, ₱→PHP, ₦→NGN, ₵→GHS, ₡→CRC, ₲→PYG, ₪→ILS, ₫→VND, ₸→KZT, ₮→MNT, ₭→LAK, ₾→GEL, ৳→BDT, ﷼→IRR, ៛→KHR, ฿→THB, R$→BRL, MX$→MXN, C$→CAD, A$→AUD, NZ$→NZD, HK$→HKD, S$→SGD, NT$→TWD, zł→PLN, Kč→CZK, Ft→HUF, kr→SEK/NOK/DKK, lei→RON, лв→BGN, din→RSD, RM→MYR, Rp→IDR, Rs→LKR/NPR, ج.م→EGP, ر.ق→QAR, د.ك→KWD, د.ب→BHD, ر.ع→OMR, د.ا→JOD, ع.د→IQD, ل.ل→LBP, ل.س→SYP, ل.د→LYD, ر.ي→YER, ج.س→SDG, د.ت→TND, DT→TND, DA→DZD, DH→MAD, ر.س→SAR, د.إ→AED, CFA→XOF/XAF, R→ZAR, KSh→KES, Br→ETB) or explicit text. For Tunisian invoices, default to TND.
 - tax: if grand_total and subtotal are both present and tax is empty, calculate tax = grand_total - subtotal.
 - line_items: each physical row = exactly ONE item. Never split or duplicate.
   * quantity must be real, never 0. Calculate from total/unit_price if missing.
@@ -415,7 +416,85 @@ def _apply_validation_flags(data: dict) -> dict:
     return data
 
 
-# ── Ollama (primary — local, free, unlimited) ─────────────────────────────────
+# ── Claude API (primary — fast, accurate) ────────────────────────────────────
+def _extract_with_claude(text: str) -> dict:
+    client = _get_anthropic_client()
+    if client is None:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+
+    prompt = _PROMPT_TEMPLATE.format(text=text[:12000])
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2048,
+        temperature=0.0,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = response.content[0].text
+    data = _clean_json_response(raw)
+    data["raw_text_length"] = len(text)
+    data["_model_used"] = CLAUDE_MODEL
+    return _apply_validation_flags(data)
+
+
+# ── Claude Vision (send image directly — no OCR needed) ─────────────────────
+_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+def _extract_with_claude_vision(file_path: str, ext: str) -> dict:
+    """Send image/PDF directly to Claude vision API — skips OCR entirely."""
+    client = _get_anthropic_client()
+    if client is None:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
+
+    content = []
+
+    if ext == ".pdf":
+        import fitz
+        doc = fitz.open(file_path)
+        for page in doc:
+            pix = page.get_pixmap(dpi=200)
+            img_b64 = base64.b64encode(pix.tobytes("png")).decode("utf-8")
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": img_b64},
+            })
+        doc.close()
+    else:
+        with open(file_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode("utf-8")
+        media_type = _MEDIA_TYPES.get(ext, "image/png")
+        content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": img_b64},
+        })
+
+    prompt = _PROMPT_TEMPLATE.format(
+        text="[See the invoice image(s) above — extract all fields directly from the image.]"
+    )
+    content.append({"type": "text", "text": prompt})
+
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2048,
+        temperature=0.0,
+        messages=[{"role": "user", "content": content}],
+    )
+
+    raw = response.content[0].text
+    data = _clean_json_response(raw)
+    data["raw_text_length"] = 0
+    data["_model_used"] = CLAUDE_MODEL
+    data["_extraction_method"] = "vision"
+    return _apply_validation_flags(data)
+
+
+# ── Ollama (fallback — local, free, unlimited) ───────────────────────────────
 def _ollama_request(prompt: str, force_json: bool) -> str:
     body = {
         "model": OLLAMA_MODEL,
@@ -446,28 +525,6 @@ def _extract_with_ollama(text: str) -> dict:
     return _apply_validation_flags(data)
 
 
-# ── Groq (fallback — free API, 14,400 req/day) ───────────────────────────────
-def _extract_with_groq(text: str) -> dict:
-    client = _get_groq_client()
-    if client is None:
-        raise RuntimeError("GROQ_API_KEY not configured")
-
-    prompt = _PROMPT_TEMPLATE.format(text=text[:12000])
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-        max_tokens=2048,
-        response_format={"type": "json_object"},
-    )
-
-    raw = response.choices[0].message.content
-    data = _clean_json_response(raw)
-    data["raw_text_length"] = len(text)
-    data["_model_used"] = GROQ_MODEL
-    return _apply_validation_flags(data)
-
-
 # ── Public entry point ────────────────────────────────────────────────────────
 def extract_invoice_fields(text: str) -> dict:
     if not text or len(text.strip()) < 10:
@@ -475,7 +532,18 @@ def extract_invoice_fields(text: str) -> dict:
 
     errors = []
 
-    # 1. Try Ollama
+    # 1. Try Claude API (primary)
+    try:
+        logger.info("Extracting with Claude (%s)…", CLAUDE_MODEL)
+        data = _extract_with_claude(text)
+        logger.info("Claude succeeded (confidence=%s)", data.get("validation", {}).get("confidence"))
+        return data
+    except Exception as e:
+        msg = f"Claude ({CLAUDE_MODEL}): {type(e).__name__}: {e}"
+        errors.append(msg)
+        logger.warning("%s — falling back to Ollama…", msg)
+
+    # 2. Try Ollama (fallback)
     try:
         logger.info("Extracting with Ollama (%s)…", OLLAMA_MODEL)
         data = _extract_with_ollama(text)
@@ -484,17 +552,6 @@ def extract_invoice_fields(text: str) -> dict:
     except Exception as e:
         msg = f"Ollama ({OLLAMA_MODEL}): {type(e).__name__}: {e}"
         errors.append(msg)
-        logger.warning("%s — falling back to Groq…", msg)
-
-    # 2. Try Groq
-    try:
-        logger.info("Extracting with Groq (%s)…", GROQ_MODEL)
-        data = _extract_with_groq(text)
-        logger.info("Groq succeeded (confidence=%s)", data.get("validation", {}).get("confidence"))
-        return data
-    except Exception as e:
-        msg = f"Groq ({GROQ_MODEL}): {type(e).__name__}: {e}"
-        errors.append(msg)
         logger.error("All LLMs failed: %s", errors)
 
     result = _build_default_empty(text, "All LLMs failed")
@@ -502,9 +559,29 @@ def extract_invoice_fields(text: str) -> dict:
     return result
 
 
+def _add_metadata(data: dict, file_path: str, ext: str) -> dict:
+    """Add source metadata, classification, and compliance to extracted data."""
+    data["source_file"] = os.path.basename(file_path)
+    data["source_format"] = ext.lstrip(".")
+    data["processed_at"] = now_iso()
+
+    from services.service_detector import classify_invoice
+    classification = classify_invoice(data)
+    data["invoice_category"] = classification["invoice_category"]
+    data["category_confidence"] = classification["confidence"]
+    if classification.get("service_fields"):
+        data["service_fields"] = classification["service_fields"]
+
+    from services.tax_validator import validate_invoice
+    data["compliance"] = validate_invoice(data)
+    return data
+
+
 def extract_from_file(file_path: str, lang: str = "auto") -> dict:
     """
     Extract invoice data from a file.
+    - Claude available  → send image/PDF directly via vision API (no OCR)
+    - Claude unavailable → OCR with Tesseract, then Ollama
     lang: OCR language hint — "auto", "en", "fr", "ar", "en+fr", etc.
     """
     ext = os.path.splitext(file_path)[1].lower()
@@ -515,44 +592,45 @@ def extract_from_file(file_path: str, lang: str = "auto") -> dict:
         with open(file_path, "rb") as f:
             xml_content = f.read()
         data = parse_xml_invoice(xml_content)
-        data["source_file"] = os.path.basename(file_path)
-        # Auto-detect service invoice from parsed data
-        from services.service_detector import classify_invoice
-        classification = classify_invoice(data)
-        data["invoice_category"] = classification["invoice_category"]
-        data["category_confidence"] = classification["confidence"]
-        if classification.get("service_fields"):
-            data["service_fields"] = classification["service_fields"]
-        # Auto-validate Tunisia compliance
-        from services.tax_validator import validate_invoice
-        data["compliance"] = validate_invoice(data)
-        return data
+        return _add_metadata(data, file_path, ext)
 
-    if ext == ".pdf":
-        text = extract_text_from_pdf(file_path, lang=lang)
-    elif ext in {".png", ".jpg", ".jpeg", ".webp"}:
-        text = extract_text_from_image(file_path, lang=lang)
-    elif ext == ".txt":
+    # ── Image / PDF: Claude Vision (fast, no OCR) or OCR + Ollama fallback ──
+    if ext in {".pdf", ".png", ".jpg", ".jpeg", ".webp"}:
+        # 1. Try Claude Vision — send image directly, skip OCR entirely
+        if _get_anthropic_client() is not None:
+            try:
+                logger.info("Using Claude Vision (skipping OCR)…")
+                data = _extract_with_claude_vision(file_path, ext)
+                logger.info("Claude Vision OK (confidence=%s)",
+                            data.get("validation", {}).get("confidence"))
+                return _add_metadata(data, file_path, ext)
+            except Exception as e:
+                logger.warning("Claude Vision failed: %s — falling back to OCR + Ollama", e)
+
+        # 2. Fallback: OCR then Ollama
+        logger.info("Running OCR for Ollama fallback…")
+        if ext == ".pdf":
+            text = extract_text_from_pdf(file_path, lang=lang)
+        else:
+            text = extract_text_from_image(file_path, lang=lang)
+
+        if not text or len(text.strip()) < 10:
+            data = _build_default_empty(text, "No readable text extracted")
+        else:
+            try:
+                data = _extract_with_ollama(text)
+            except Exception as e:
+                logger.error("Ollama also failed: %s", e)
+                data = _build_default_empty(text, f"All extraction methods failed: {e}")
+
+        return _add_metadata(data, file_path, ext)
+
+    # ── Text files: normal text extraction pipeline ─────────────────────────
+    if ext == ".txt":
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()
     else:
         text = ""
 
     data = extract_invoice_fields(text)
-    data["source_file"] = os.path.basename(file_path)
-    data["source_format"] = ext.lstrip(".")
-    data["processed_at"] = now_iso()
-
-    # Auto-detect service invoice
-    from services.service_detector import classify_invoice
-    classification = classify_invoice(data)
-    data["invoice_category"] = classification["invoice_category"]
-    data["category_confidence"] = classification["confidence"]
-    if classification.get("service_fields"):
-        data["service_fields"] = classification["service_fields"]
-
-    # Auto-validate Tunisia compliance
-    from services.tax_validator import validate_invoice
-    data["compliance"] = validate_invoice(data)
-
-    return data
+    return _add_metadata(data, file_path, ext)

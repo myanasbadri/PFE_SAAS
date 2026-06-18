@@ -1,0 +1,97 @@
+@startuml Diagramme_Interface_Client_Backend_Part1
+title Diagramme de composants — Interface client-serveur (1/2) : Couche client
+skinparam backgroundColor #FFFFFF
+skinparam shadowing true
+skinparam dpi 200
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 13
+skinparam componentStyle rectangle
+skinparam titleFontSize 18
+
+skinparam component {
+  BackgroundColor #F0F4FF
+  BorderColor #3366CC
+  BorderThickness 2
+  FontColor #0A2540
+}
+
+skinparam package {
+  BackgroundColor #F5F9FF
+  BorderColor #2E75B6
+  BorderThickness 2
+  FontStyle bold
+  RoundCorner 10
+}
+
+skinparam note {
+  BackgroundColor #FFF9C4
+  BorderColor #CC9900
+}
+
+skinparam arrow {
+  Color #2C3E50
+  FontColor #2E75B6
+  FontSize 11
+  Thickness 1.5
+}
+
+package "Couche Client — Next.js 16 / React 19 (TypeScript)" as CLIENT #E3F2FD {
+
+  package "Composants applicatifs (22)" as COMPS {
+    component [AIExtraction] as CmpExt #FFE0B2
+    component [AIAdvisor] as CmpAdv #FFE0B2
+    component [InvoiceManagement] as CmpInv
+    component [InvoiceVerification] as CmpVer
+    component [Dashboard] as CmpDash
+    component [ScanImport] as CmpScan
+    component [NotificationBell] as CmpNotif
+    component [TeamManagement] as CmpTeam
+    component [OrgSettings] as CmpOrg
+    component [Authentication] as CmpAuth
+    component [CompliancePanel] as CmpComp
+  }
+
+  package "Couche d'abstraction API" as APICLIENT {
+    component [api.ts\n(Axios / Fetch)] as ApiLib #C8E6C9
+  }
+
+  package "Contextes React" as CTX {
+    component [LanguageContext\n(fr / en / ar)] as CtxLang
+    component [AuthContext\n(token JWT)] as CtxAuth
+    component [OrgContext\n(org_id courant)] as CtxOrg
+  }
+}
+
+note bottom of APICLIENT
+  **Headers injectés automatiquement :**
+  ─────────────────────────────────────
+  Authorization : Bearer <JWT 24h>
+  X-Org-Id : <identifiant organisation>
+  Content-Type : application/json
+  (ou multipart/form-data pour uploads)
+end note
+
+' Composants → ApiLib
+CmpExt --> ApiLib
+CmpAdv --> ApiLib
+CmpInv --> ApiLib
+CmpVer --> ApiLib
+CmpDash --> ApiLib
+CmpScan --> ApiLib
+CmpNotif --> ApiLib
+CmpAuth --> ApiLib
+CmpTeam --> ApiLib
+CmpOrg --> ApiLib
+
+interface "API REST\nJSON / multipart\n(HTTPS)" as REST
+
+ApiLib -down-> REST
+
+legend bottom right
+  <b>Légende</b>
+  |<back:#E3F2FD>       </back>| Couche Client (Next.js) |
+  |<back:#FFE0B2>       </back>| Modules IA (extraction / conseiller) |
+  |<back:#C8E6C9>       </back>| Couche d'abstraction API |
+endlegend
+
+@enduml

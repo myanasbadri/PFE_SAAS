@@ -16,13 +16,13 @@ ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "webp", "txt", "xml"}
 TESSERACT_CMD = os.getenv("TESSERACT_CMD", "/usr/bin/tesseract" if os.name != "nt" else r"C:\Users\MSI\miniconda3\envs\ai310\Library\bin\tesseract.exe")
 TESSDATA_PREFIX = os.getenv("TESSDATA_PREFIX", "/usr/share/tesseract-ocr/5/tessdata" if os.name != "nt" else r"C:\Users\MSI\miniconda3\envs\ai310\share\tessdata")
 
-# Ollama (primary LLM - local)
+# Claude API (primary LLM)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+
+# Ollama (fallback LLM — local, free)
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
-
-# Groq (fallback LLM — free tier 14,400 req/day)
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # MagicBell Notifications
 MAGICBELL_API_KEY = os.getenv("MAGICBELL_API_KEY", "")
@@ -48,6 +48,9 @@ STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO", "")
 STRIPE_PRICE_ENTERPRISE = os.getenv("STRIPE_PRICE_ENTERPRISE", "")
+
+# Google OAuth
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 # CORS — comma-separated allowed origins (production frontend URLs)
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")

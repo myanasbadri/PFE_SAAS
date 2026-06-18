@@ -1,0 +1,121 @@
+@startuml Diagramme_Sequence_Suppression_Facture
+title Diagramme de séquence — Suppression d'une facture
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "@token_required\n@org_required" as auth #FFF9C4
+  database "MongoDB" as db #F3E5F5
+  participant "Notification\nService" as notif #FFEBEE
+end box
+
+== Phase 1 : Demande de suppression ==
+
+user -> front : Cliquer sur « Supprimer »\ndepuis la liste des factures
+activate front
+
+note right of front
+  **Composant : InvoiceManagement**
+  ──────────────────────────────────
+  • Dialogue de confirmation
+    (AlertDialog de Radix UI)
+  • Prévention des suppressions
+    accidentelles
+end note
+
+front -> front : Afficher le dialogue\nde confirmation
+front --> user : « Êtes-vous sûr de vouloir\nsupprimer cette facture ? »
+
+alt L'utilisateur annule
+  user -> front : Cliquer « Annuler »
+  front -> front : Fermer le dialogue
+  front --> user : Retour à la liste
+else L'utilisateur confirme
+
+  user -> front : Confirmer la suppression
+
+  front -> front : Afficher l'indicateur\nde chargement
+
+  == Phase 2 : Envoi de la requête ==
+
+  front -> api : **DELETE /api/invoices/{id}**\nHeaders : Authorization: Bearer <JWT>\n              X-Org-Id: <org_id>
+  activate api
+
+  api -> auth : Vérifier le token JWT\net l'appartenance à l'organisation
+  activate auth
+
+  alt Token invalide ou expiré
+    auth --> front : **401 Unauthorized**
+    front --> user : Rediriger vers Login
+  else Token valide
+
+    auth -> auth : Vérifier is_active\nExtraire user_id, org_id
+    auth --> api : Utilisateur authentifié
+    deactivate auth
+
+    == Phase 3 : Vérification et suppression ==
+
+    api -> db : Rechercher la facture\npar _id (ObjectId)
+    activate db
+    db --> api : Document facture\n(avec org_id, original_filename)
+    deactivate db
+
+    alt Facture non trouvée
+      api --> front : **404 Not Found**\n{ error: "Invoice not found" }
+      front --> user : Afficher message d'erreur
+    else Facture trouvée
+
+      api -> api : Vérifier que\nfacture.org_id == org_id courant
+
+      alt Accès refusé
+        api --> front : **403 Forbidden**\n{ error: "Access denied" }
+        front --> user : Afficher erreur d'accès
+      else Accès autorisé
+
+        api -> db : **invoices.delete_one(**\n  { _id: ObjectId(id) }\n**)**
+        activate db
+        note right of db
+          **Suppression définitive**
+          Le document est supprimé
+          de manière permanente
+          (pas de corbeille)
+        end note
+        db --> api : Suppression confirmée
+        deactivate db
+
+        == Phase 4 : Traçabilité et notification ==
+
+        api -> db : **activity.insert_one(**\n  { action: "delete_invoice",\n    user_id, org_id,\n    details: { invoice_id,\n      original_filename },\n    timestamp, ip_address }\n**)**
+        activate db
+        db --> api : OK
+        deactivate db
+
+        api -> notif : notify_invoice_deleted(\n  email, invoice_id, filename)
+        activate notif
+        notif --> api : OK
+        deactivate notif
+
+        api --> front : **200 OK**\n{ success: true,\n  message: "Invoice deleted" }
+        deactivate api
+
+        front -> front : Retirer la facture\nde la liste affichée\n(mise à jour de l'état local)
+        front --> user : Afficher confirmation\n(toast « Facture supprimée »)
+
+      end
+    end
+  end
+end
+
+deactivate front
+
+@enduml

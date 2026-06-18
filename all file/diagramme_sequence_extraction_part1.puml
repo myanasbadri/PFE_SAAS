@@ -1,0 +1,159 @@
+@startuml Diagramme_Sequence_Extraction_Part1
+title Diagramme de séquence — Extraction intelligente (1/2) : Dépôt et lancement
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "Worker\n(Celery / Thread)" as worker #FFF9C4
+  participant "Extractor\nCore" as extractor #FFE0B2
+  database "MongoDB" as db #F3E5F5
+end box
+
+box "Services IA" #FFF3E0
+  participant "Claude Vision\n(API Anthropic)" as claude #FFCC80
+  participant "Ollama\n(Local)" as ollama #FFAB91
+end box
+
+== Phase 1 : Dépôt et validation du fichier ==
+
+user -> front : Déposer un fichier\n(glisser-déposer ou sélection)
+activate front
+
+note right of front
+  **Composant : AIExtraction**
+  ─────────────────────────────
+  • Zone de glisser-déposer
+  • Sélection de fichier
+  • Formats : PDF, JPG, PNG,
+    TIFF, BMP, WEBP, XML
+end note
+
+front -> front : Valider le type de fichier\n(extension autorisée)
+
+front -> api : **POST /api/extract-file**\n(multipart/form-data)\nHeaders : Authorization, X-Org-Id\n{ file, lang? }
+activate api
+
+api -> api : @token_required\n@org_required\n@check_plan_limit("invoices")
+
+api -> api : Valider le fichier :\n• Présence du fichier\n• Extension autorisée\n• Nom sécurisé (secure_filename)
+
+alt Fichier invalide
+  api --> front : **400 Bad Request**\n{ error: "Invalid file" }
+  front --> user : Afficher l'erreur
+else Fichier valide
+
+  api -> api : Sauvegarder le fichier\n(YYYYMMDDHHMMSS_filename)
+
+  == Phase 2 : Lancement du traitement ==
+
+  alt Celery + Redis disponibles
+    api -> worker : **process_invoice_task.delay(**\n  user_id, file_path,\n  filename, org_id, lang\n**)**
+    activate worker
+    api --> front : **202 Accepted**\n{ task_id, mode: "async" }
+  else Redis indisponible (fallback)
+    api -> db : Créer la facture provisoire\n{ status: "processing",\n  share_code: "INV-..." }
+    activate db
+    db --> api : invoice_id
+    deactivate db
+    api -> worker : Lancer un **Thread** de\ntraitement en arrière-plan
+    activate worker
+    api --> front : **202 Accepted**\n{ invoice_id, mode: "poll" }
+  end
+  deactivate api
+
+  front -> front : Afficher la barre\nde progression
+  front --> user : « Traitement en cours... »
+
+  note right of front
+    **Interface : Progression**
+    ──────────────────────────
+    • Barre de progression animée
+    • Étapes affichées en temps réel
+    • Polling périodique du statut
+  end note
+
+  == Phase 3 : Extraction par le worker ==
+
+  worker -> db : Créer la facture provisoire\n(si pas déjà créée)\n{ status: "processing" }
+  activate db
+  db --> worker : invoice_id
+  deactivate db
+
+  worker -> extractor : **extract_from_file(**\n  file_path, lang\n**)**
+  activate extractor
+
+  extractor -> extractor : Déterminer le type\nde fichier (extension)
+
+  alt Fichier XML
+    extractor -> extractor : **parse_xml_invoice()**\nExtraction déterministe\ndepuis les balises XML
+    extractor -> extractor : Score de confiance = 100 %
+
+  else Fichier image (JPG, PNG, WEBP)
+    extractor -> claude : **Claude Vision API**\nEnvoi direct de l'image en Base64\n(pas d'OCR nécessaire)
+    activate claude
+
+    alt Claude Vision répond
+      claude --> extractor : Données JSON extraites\n(scores de confiance élevés)
+      deactivate claude
+    else Claude indisponible
+      claude --> extractor : Erreur
+      deactivate claude
+      extractor -> extractor : **OCR Tesseract**\n(fra + eng + ara)
+      extractor -> ollama : **POST /api/chat**\n{ prompt + texte OCR }
+      activate ollama
+      alt Ollama répond
+        ollama --> extractor : Données JSON extraites
+        deactivate ollama
+      else Ollama indisponible
+        ollama --> extractor : Erreur
+        deactivate ollama
+        extractor -> extractor : **Extraction regex**
+      end
+    end
+
+  else Fichier PDF
+    extractor -> extractor : Convertir les pages\nen images (200 DPI)
+    extractor -> claude : **Claude Vision API**\nEnvoi des pages en Base64
+    activate claude
+    alt Claude Vision répond
+      claude --> extractor : Données JSON extraites
+      deactivate claude
+    else Claude indisponible
+      claude --> extractor : Erreur
+      deactivate claude
+      extractor -> extractor : **pdfplumber** + OCR si nécessaire
+      extractor -> ollama : **POST /api/chat**\n{ prompt + texte extrait }
+      activate ollama
+      alt Ollama répond
+        ollama --> extractor : Données JSON extraites
+        deactivate ollama
+      else Ollama indisponible
+        ollama --> extractor : Erreur
+        deactivate ollama
+        extractor -> extractor : **Extraction regex**
+      end
+    end
+  end
+
+  extractor --> worker : Données brutes extraites
+  deactivate extractor
+  deactivate worker
+
+end
+deactivate front
+
+note over front, extractor
+  **Suite : voir diagramme Extraction (2/2)** — Post-traitement, persistance et résultats
+end note
+
+@enduml

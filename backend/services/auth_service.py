@@ -3,6 +3,7 @@ import jwt
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify, g
+from bson import ObjectId
 from config import JWT_SECRET
 
 
@@ -44,6 +45,12 @@ def token_required(f):
             g.user = decoded
         except Exception:
             return jsonify({"success": False, "error": "Invalid or expired token"}), 401
+
+        # Check if user account is still active
+        from services.db_service import users_collection
+        user = users_collection.find_one({"_id": ObjectId(g.user["user_id"])})
+        if not user or not user.get("is_active", True):
+            return jsonify({"success": False, "error": "Your account has been disabled"}), 403
 
         return f(*args, **kwargs)
 

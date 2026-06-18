@@ -153,14 +153,18 @@ def org_owner_required(f):
 # ── Usage checking ───────────────────────────────────────────────────────────
 
 def check_plan_limit(resource: str):
-    """Decorator factory: checks if the org is within plan limits for a resource."""
+    """
+    Decorator factory: checks if the org is within plan limits for a resource.
+    resource should match the usage field name, e.g. "invoices" or "ai_queries".
+    Plan limits key = "max_{resource}_per_month", usage key = "{resource}_this_month".
+    """
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
             db = _get_db()
             org_id = g.org["org_id"]
             plan = g.org.get("plan", "free")
-            limit = get_plan_limit(plan, f"max_{resource}")
+            limit = get_plan_limit(plan, f"max_{resource}_per_month")
 
             if limit == -1:  # unlimited
                 return f(*args, **kwargs)
@@ -481,7 +485,12 @@ def register_org_routes(app, db):
     @org_required
     def list_members(org_id):
         memberships = list(db["memberships"].find({"org_id": org_id}))
-        user_ids = [ObjectId(m["user_id"]) for m in memberships]
+        user_ids = []
+        for m in memberships:
+            try:
+                user_ids.append(ObjectId(m["user_id"]))
+            except Exception:
+                pass
         users = {
             str(u["_id"]): u
             for u in db["users"].find({"_id": {"$in": user_ids}}, {"password": 0})
@@ -489,7 +498,8 @@ def register_org_routes(app, db):
 
         members = []
         for m in memberships:
-            user = users.get(m["user_id"], {})
+            uid = str(ObjectId(m["user_id"])) if m.get("user_id") else m.get("user_id", "")
+            user = users.get(uid, {})
             members.append({
                 "user_id": m["user_id"],
                 "name": user.get("name", "Unknown"),
@@ -611,28 +621,36 @@ def register_org_routes(app, db):
 
         db["invitations"].insert_one(invite_doc)
 
-        # Send invitation email
+        # Send invitation email + in-app notification
         try:
-            from services.notification_system_backend import get_notification_service
-            ns = get_notification_service()
-            if ns and ns.email_service:
-                from config import APP_URL
-                invite_url = f"{APP_URL}/invite/{invite_token}"
-                org_name = g.org.get("org_name", "SmartInvoice")
-                subject = f"You're invited to join {org_name} on SmartInvoice"
-                html = f"""
-                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
-                    <h2>You've been invited!</h2>
-                    <p>You've been invited to join <strong>{org_name}</strong> on SmartInvoice as a <strong>{role}</strong>.</p>
-                    <p style="margin:30px 0;">
-                        <a href="{invite_url}" style="background:#10B981;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;">
-                            Accept Invitation
-                        </a>
-                    </p>
-                    <p style="color:#666;font-size:13px;">This invitation expires in 7 days.</p>
-                </div>
-                """
-                ns.email_service.send_email([email], subject, html)
+            from services.notification_system_backend import EmailService, get_notification_service
+            from config import APP_URL
+            invite_url = f"{APP_URL}/invite/{invite_token}"
+            org_name = g.org.get("org_name", "SmartInvoice")
+            subject = f"You're invited to join {org_name} on SmartInvoice"
+            html = EmailService._build_html(
+                title="You've been invited!",
+                subtitle="Team Invitation",
+                content=f"You've been invited to join <strong>{org_name}</strong> on SmartInvoice as a <strong>{role}</strong>.",
+                action_url=invite_url,
+                action_label="Accept Invitation",
+            )
+            sent = EmailService.send_email([email], subject, html)
+            if not sent:
+                logger.warning("Invitation email to %s was not sent (SMTP not configured or failed)", email)
+
+            # Create in-app notification if the invited user already has an account
+            if existing_user:
+                ns = get_notification_service()
+                if ns:
+                    ns.create_notification(
+                        user_id=str(existing_user["_id"]),
+                        title="Team Invitation",
+                        content=f"You've been invited to join {org_name} as {role}.",
+                        category="system",
+                        action_url=f"/invite/{invite_token}",
+                        priority="high",
+                    )
         except Exception as e:
             logger.warning("Failed to send invitation email: %s", e)
 
@@ -683,6 +701,34 @@ def register_org_routes(app, db):
             return jsonify({"success": False, "error": "Invitation not found"}), 404
 
         return jsonify({"success": True, "message": "Invitation revoked"}), 200
+
+    # ── Get my pending invitations (for the logged-in user) ────────
+    @org_bp.route("/api/invitations/my", methods=["GET"])
+    @token_required
+    def my_invitations():
+        """Return all pending invitations for the currently logged-in user's email."""
+        user_email = g.user.get("email", "").strip().lower()
+        if not user_email:
+            return jsonify({"success": True, "invitations": []}), 200
+
+        invites = list(db["invitations"].find(
+            {"email": user_email, "status": "pending"},
+            {"_id": 1, "org_id": 1, "role": 1, "token": 1, "created_at": 1},
+        ).sort("created_at", -1))
+
+        result = []
+        for inv in invites:
+            org = db["organizations"].find_one({"_id": ObjectId(inv["org_id"])})
+            result.append({
+                "id": str(inv["_id"]),
+                "token": inv["token"],
+                "org_id": inv["org_id"],
+                "org_name": org.get("name", "Unknown") if org else "Unknown",
+                "role": inv["role"],
+                "created_at": inv.get("created_at", ""),
+            })
+
+        return jsonify({"success": True, "invitations": result}), 200
 
     # ── Accept invitation (public-ish — requires auth but no org) ────
     @org_bp.route("/api/invitations/<invite_token>/accept", methods=["POST"])

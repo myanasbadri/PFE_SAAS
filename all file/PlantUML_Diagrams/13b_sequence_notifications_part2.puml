@@ -1,0 +1,116 @@
+@startuml Diagramme_Sequence_Notifications_Part2
+title Diagramme de séquence — Notifications (2/2) : Marquage et préférences
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "Notification\nService" as ns #FFE0B2
+  database "MongoDB" as db #F3E5F5
+end box
+
+== Partie 3 : Marquage comme lue ==
+
+user -> front : Cliquer sur une notification
+activate front
+
+front -> api : **PATCH /api/notifications/{id}/read**\nHeaders : Authorization
+activate api
+
+api -> api : @token_required
+
+api -> ns : mark_as_read(user_id, id)
+activate ns
+
+ns -> db : **notifications.update_one(**\n  { _id, user_id },\n  { $set: { is_read: true,\n    read_at: now() } }\n**)**
+activate db
+db --> ns : OK
+deactivate db
+
+ns --> api : true
+deactivate ns
+
+api --> front : **200 OK**\n{ success: true }
+deactivate api
+
+front -> front : Mettre à jour l'interface\n(retirer le badge non lue,\ndécrémenter le compteur)
+front --> user : Notification marquée\ncomme lue
+
+deactivate front
+
+== Partie 4 : Marquer toutes comme lues ==
+
+user -> front : Cliquer « Tout marquer\ncomme lu »
+activate front
+
+front -> api : **PATCH /api/notifications/read-all**\nHeaders : Authorization
+activate api
+
+api -> api : @token_required
+
+api -> ns : mark_all_as_read(user_id)
+activate ns
+
+ns -> db : **notifications.update_many(**\n  { user_id, is_read: false },\n  { $set: { is_read: true,\n    read_at: now() } }\n**)**
+activate db
+db --> ns : count modifié
+deactivate db
+
+ns --> api : count
+deactivate ns
+
+api --> front : **200 OK**\n{ updated: count }
+deactivate api
+
+front -> front : Réinitialiser le compteur\n(badge = 0)
+front --> user : Toutes les notifications\nmarquées comme lues
+
+deactivate front
+
+== Partie 5 : Gestion des préférences ==
+
+user -> front : Accéder aux préférences\nde notification
+activate front
+
+note right of front
+  **Interface : Préférences**
+  ────────────────────────────
+  • Activation/désactivation par canal
+    (in-app, email, SMS)
+  • Activation/désactivation par catégorie
+    (extraction, facture, révision, système)
+  • Heures silencieuses (début, fin)
+end note
+
+front -> api : **GET /api/notifications/preferences**\nHeaders : Authorization
+activate api
+api --> front : Préférences actuelles
+deactivate api
+
+front --> user : Afficher les préférences\navec interrupteurs (toggles)
+
+user -> front : Modifier les préférences\n(ex: désactiver les emails)
+
+front -> api : **PUT /api/notifications/preferences**\nHeaders : Authorization\n{ channels, types, quiet_hours }
+activate api
+api -> db : Mettre à jour les préférences
+activate db
+db --> api : OK
+deactivate db
+api --> front : **200 OK**
+deactivate api
+
+front --> user : Afficher confirmation\n« Préférences sauvegardées »
+
+deactivate front
+
+@enduml

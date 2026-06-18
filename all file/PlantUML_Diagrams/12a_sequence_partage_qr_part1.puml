@@ -1,0 +1,90 @@
+@startuml Diagramme_Sequence_Partage_QR_Part1
+title Diagramme de séquence — Partage par QR code (1/2) : Génération
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client — Émetteur" #E3F2FD
+  actor "Utilisateur A\n(Émetteur)" as userA
+  participant "Interface A\n(Next.js / React)" as frontA #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  database "MongoDB" as db #F3E5F5
+end box
+
+== Partie 1 : Génération du code de partage et du QR code ==
+
+userA -> frontA : Cliquer sur « Partager »\ndepuis la liste des factures
+activate frontA
+
+note right of frontA
+  **Composant : InvoiceManagement**
+  ─────────────────────────────────
+  • Bouton « Partager » sur chaque
+    facture dans la vue tabulaire
+  • Dialogue de partage avec
+    QR code et code textuel
+end note
+
+frontA -> api : **GET /api/invoices/{id}/share-info**\nHeaders : Authorization, X-Org-Id
+activate api
+
+api -> api : @token_required\n@org_required
+
+api -> db : Rechercher la facture par _id
+activate db
+db --> api : Document facture
+deactivate db
+
+api -> api : Vérifier org_id\n(contrôle d'accès)
+
+alt La facture possède déjà un share_code
+  api --> frontA : { share_code: "INV-A3X9K2B7" }
+else Pas de share_code existant
+  api -> api : **generate_share_code()**\nFormat : INV-[8 caractères\nalphanumériques aléatoires]
+  note right of api
+    Génération sécurisée :
+    ─────────────────────
+    • secrets.choice() (CSPRNG)
+    • Vérification d'unicité
+      dans la base de données
+    • Exemple : INV-A3X9K2B7
+  end note
+
+  api -> db : Vérifier l'unicité du code
+  activate db
+  db --> api : Aucun doublon trouvé
+  deactivate db
+
+  api -> db : **invoices.update_one(**\n  { $set: { share_code } }\n**)**
+  activate db
+  db --> api : OK
+  deactivate db
+
+  api --> frontA : { success: true,\n  share_code: "INV-A3X9K2B7" }
+end
+deactivate api
+
+frontA -> frontA : Générer le QR code\ncôté client (QRCodeSVG)
+note right of frontA
+  **Interface : Dialogue de partage**
+  ────────────────────────────────
+  Contenu du QR code :
+  { "share_code": "INV-A3X9K2B7" }
+
+  Rendu SVG avec qrcode.react
+  + code textuel copiable
+end note
+
+frontA --> userA : Afficher le dialogue de partage\navec le QR code et le code\nINV-A3X9K2B7
+
+userA -> userA : Partager le QR code\n(capture d'écran, impression,\nou communication directe)
+
+deactivate frontA
+
+@enduml

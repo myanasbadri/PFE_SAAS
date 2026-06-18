@@ -1,0 +1,150 @@
+@startuml Diagramme_Activite_Pipeline_Extraction
+title Diagramme d'activité — Pipeline d'extraction intelligente
+
+skinparam activityBackgroundColor #F0F4FF
+skinparam activityBorderColor #3366CC
+skinparam activityDiamondBackgroundColor #FFFFCC
+skinparam activityDiamondBorderColor #CC9900
+skinparam titleFontSize 18
+
+|#E8F0FE|Utilisateur|
+|#E8F5E9|Backend Flask|
+|#F3E5F5|Moteur IA|
+|#FFEBEE|Conformite|
+
+|Utilisateur|
+start
+:Deposer un ou plusieurs fichiers\n(glisser-deposer ou selection);
+note right
+  Formats acceptes :
+  PDF, JPG, PNG, TIFF,
+  BMP, WEBP, XML
+end note
+
+|Backend Flask|
+:Receptionner le fichier via API REST\n(POST /api/extract-file);
+:Creer une tache Celery asynchrone;
+:Determiner le type de fichier;
+
+switch (Type de fichier ?)
+case (XML)
+  :Appeler **xml_parser**\n(extraction deterministe);
+  :Extraire tous les champs structures\ndirectement depuis les balises XML;
+  :Score de confiance = **100%**;
+  note right
+    Court-circuite la chaine LLM
+    Extraction rapide et fiable
+  end note
+
+case (Image : JPG, PNG, WEBP)
+
+  |Moteur IA|
+  :Envoyer l'image directement a\n**Claude Vision API**\n(pas d'OCR necessaire);
+  note right
+    L'image est encodee en Base64
+    et envoyee directement a Claude
+    qui lit le document visuellement
+  end note
+
+  if (Claude Vision repond ?) then (Oui)
+    :Recevoir les donnees JSON;
+    :Scores de confiance eleves;
+  else (Non : echec / timeout / quota)
+    |Backend Flask|
+    :Pretraiter l'image\n(niveaux de gris, contraste);
+    :Appliquer **OCR Tesseract**\n(fra + eng + ara);
+
+    |Moteur IA|
+    :Appeler **Ollama local**\n(qwen2.5:7b-instruct)\navec le texte OCR;
+
+    if (Ollama repond ?) then (Oui)
+      :Recevoir les donnees JSON;
+      :Scores de confiance moyens;
+    else (Non : echec / indisponible)
+      :Appliquer **extraction regex**\n(expressions regulieres);
+      :Extraire les champs basiques\n(dates, montants, matricule fiscal);
+      :Scores de confiance **faibles** (< 50%);
+    endif
+  endif
+
+case (PDF)
+  |Backend Flask|
+
+  |Moteur IA|
+  :Convertir les pages PDF en images\net envoyer a **Claude Vision API**\n(pas d'OCR necessaire);
+
+  if (Claude Vision repond ?) then (Oui)
+    :Recevoir les donnees JSON;
+    :Scores de confiance eleves;
+  else (Non : echec / timeout / quota)
+    |Backend Flask|
+    :Extraire le texte avec **pdfplumber**\n(couche texte native);
+    if (Texte extrait suffisant ?) then (Non)
+      :Convertir les pages en images;
+      :Appliquer **OCR Tesseract**\n(fra + eng + ara);
+    else (Oui)
+    endif
+
+    |Moteur IA|
+    :Appeler **Ollama local**\n(qwen2.5:7b-instruct)\navec le texte extrait;
+
+    if (Ollama repond ?) then (Oui)
+      :Recevoir les donnees JSON;
+      :Scores de confiance moyens;
+    else (Non : echec / indisponible)
+      :Appliquer **extraction regex**\n(expressions regulieres);
+      :Extraire les champs basiques\n(dates, montants, matricule fiscal);
+      :Scores de confiance **faibles** (< 50%);
+    endif
+  endif
+
+endswitch
+
+|Backend Flask|
+
+fork
+  :Appeler **service_detector**\n(classification biens/services);
+  :Determiner la categorie :\nbiens / services / mixte;
+fork again
+  :Calculer le score de confiance\nglobal (moyenne ponderee);
+fork again
+  :Detecter la devise\nparmi 129 referencees;
+end fork
+
+|Conformite|
+:Executer le **moteur de conformite**;
+
+partition "7 familles de controles" {
+  :1. Presence des champs obligatoires;
+  :2. Format des dates;
+  :3. Validite du matricule fiscal;
+  :4. Integrite des lignes de facture;
+  :5. Coherence des montants et TVA;
+  :6. Conformite de la devise;
+  :7. Completude des informations fiscales;
+}
+
+:Calculer le **score de conformite**\n(agregation ponderee);
+
+|Backend Flask|
+:Persister la facture extraite\ndans MongoDB (collection invoices);
+:Enregistrer l evenement dans\nle journal d audit;
+
+|Utilisateur|
+:Afficher les resultats d extraction\navec les scores de confiance;
+
+if (Score de confiance < seuil ?) then (Oui)
+  :Marquer la facture comme\n**A verifier**;
+  note right
+    Dirigee vers l interface
+    de verification humaine
+    (human-in-the-loop)
+  end note
+else (Non)
+  :Marquer la facture comme\n**Extraite**;
+endif
+
+:Consulter les resultats;
+stop
+
+@enduml

@@ -1,0 +1,135 @@
+@startuml Diagramme_Activite_Conformite
+title Diagramme d'activité — Vérification de conformité fiscale
+skinparam activityBackgroundColor #F0F4FF
+skinparam activityBorderColor #3366CC
+skinparam activityDiamondBackgroundColor #FFFFCC
+skinparam activityDiamondBorderColor #CC9900
+skinparam titleFontSize 18
+
+start
+:Recevoir les données\nde la facture extraite;
+
+partition "Famille 1 : Champs obligatoires" #E8F0FE {
+  :Vérifier la présence de :\n• vendor_name (émetteur)\n• invoice_no (numéro)\n• bill_to.name (destinataire)\n• line_items (au moins 1 ligne)\n• totals.grand_total (total);
+  if (Champs manquants ?) then (Oui)
+    :Ajouter une erreur **critique**\npar champ manquant;
+    note right
+      Code : MISSING_VENDOR,
+      MISSING_INVOICE_NO,
+      MISSING_BUYER, etc.
+      Sévérité : **critique**
+    end note
+  else (Non)
+  endif
+}
+
+partition "Famille 2 : Format des dates" #E8F5E9 {
+  :Vérifier le format des dates\n(date, due_date);
+  if (Format valide YYYY-MM-DD ?) then (Oui)
+    if (Date future > J+1 ?) then (Oui)
+      :Ajouter une erreur\n(FUTURE_DATE);
+    else (Non)
+    endif
+  else (Non)
+    :Ajouter une erreur\n(INVALID_DATE_FORMAT);
+  endif
+}
+
+partition "Famille 3 : Matricule fiscal" #F3E5F5 {
+  :Vérifier le matricule fiscal\n(seller_vat_id, buyer_vat_id);
+  if (Matricule présent ?) then (Oui)
+    if (Format tunisien valide ?) then (Oui)
+      note right
+        Formats acceptés :
+        • 1234567A/P/M/000
+        • 1234567APM000
+        • 1234567A (court)
+      end note
+    else (Non)
+      :Ajouter une erreur\n(INVALID_VAT_FORMAT);
+    endif
+  else (Non)
+    :Ajouter une erreur critique\n(MISSING_VAT_ID);
+  endif
+}
+
+partition "Famille 4 : Intégrité des lignes" #FFF9C4 {
+  :Vérifier chaque ligne\nde la facture;
+  while (Pour chaque ligne)
+    if (Description présente ?) then (Non)
+      :Erreur MISSING_ITEM_DESCRIPTION;
+    else (Oui)
+    endif
+    if (Total déterminable ?\n(explicite ou qté × prix)) then (Non)
+      :Erreur MISSING_ITEM_TOTAL;
+    else (Oui)
+    endif
+  endwhile
+}
+
+partition "Famille 5 : Cohérence arithmétique" #FFE0B2 {
+  :Vérifier la cohérence\ndes montants;
+  :Ligne : total ≈ qté × prix unitaire\n(tolérance 1 % ou 0,02);
+  :Sous-total = somme des lignes;
+  :Total = sous-total + taxe - remise;
+  :Taxe ≈ sous-total × taux;
+  if (Écarts détectés ?) then (Oui)
+    :Ajouter un avertissement\npar écart détecté;
+    note right
+      ARITHMETIC_MISMATCH_LINE
+      ARITHMETIC_MISMATCH_SUBTOTAL
+      TAX_CALCULATION_MISMATCH
+    end note
+  else (Non)
+  endif
+}
+
+partition "Famille 6 : Taux de TVA" #FFEBEE {
+  :Vérifier le taux de TVA;
+  if (Taux ∈ {0, 7, 13, 19} % ?) then (Non)
+    :Ajouter un avertissement\n(INVALID_TAX_RATE);
+    note right
+      Taux tunisiens :
+      19 % normal
+      13 % / 7 % réduit
+      0 % exonéré
+    end note
+  else (Oui)
+  endif
+}
+
+partition "Famille 7 : Conformité services" #E3F2FD {
+  if (Catégorie = services\nou mixte ?) then (Oui)
+    if (Descriptions de services\nprésentes dans les lignes ?) then (Non)
+      :Ajouter un avertissement\n(SERVICE_DESCRIPTION_MISSING);
+    else (Oui)
+    endif
+  else (Non : biens)
+  endif
+}
+
+:Calculer le score de conformité;
+note right
+  Pénalités :
+  • Critique : **−10 points**
+  • Erreur  : **−5 points**
+  • Avertissement : **−2 points**
+  Score = max(0, (120 − pénalités) / 120 × 100)
+end note
+
+if (Score ≥ 60 ET aucune erreur ?) then (Oui)
+  if (Avertissements ?) then (Oui)
+    :Statut : **conforme\navec avertissements**;
+    #C8E6C9:Retourner le rapport\nde conformité;
+  else (Non)
+    :Statut : **pleinement conforme**;
+    #A5D6A7:Retourner le rapport\nde conformité;
+  endif
+else (Non)
+  :Statut : **non conforme**;
+  #FFCDD2:Retourner le rapport\navec les erreurs;
+endif
+
+stop
+
+@enduml

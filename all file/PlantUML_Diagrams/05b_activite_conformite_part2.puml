@@ -1,0 +1,77 @@
+@startuml Diagramme_Activite_Conformite_Part2
+title Diagramme d'activité — Conformité fiscale (2/2) : Familles 5 à 7 et scoring
+skinparam activityBackgroundColor #F0F4FF
+skinparam activityBorderColor #3366CC
+skinparam activityDiamondBackgroundColor #FFFFCC
+skinparam activityDiamondBorderColor #CC9900
+skinparam titleFontSize 18
+
+start
+:Suite des familles 1 à 4\n(voir diagramme 1/2);
+
+partition "Famille 5 : Cohérence arithmétique" #FFE0B2 {
+  :Vérifier la cohérence\ndes montants;
+  :Ligne : total ≈ qté × prix unitaire\n(tolérance 1 % ou 0,02);
+  :Sous-total = somme des lignes;
+  :Total = sous-total + taxe - remise;
+  :Taxe ≈ sous-total × taux;
+  if (Écarts détectés ?) then (Oui)
+    :Ajouter un avertissement\npar écart détecté;
+    note right
+      ARITHMETIC_MISMATCH_LINE
+      ARITHMETIC_MISMATCH_SUBTOTAL
+      TAX_CALCULATION_MISMATCH
+    end note
+  else (Non)
+  endif
+}
+
+partition "Famille 6 : Taux de TVA" #FFEBEE {
+  :Vérifier le taux de TVA;
+  if (Taux ∈ {0, 7, 13, 19} % ?) then (Non)
+    :Ajouter un avertissement\n(INVALID_TAX_RATE);
+    note right
+      Taux tunisiens :
+      19 % normal
+      13 % / 7 % réduit
+      0 % exonéré
+    end note
+  else (Oui)
+  endif
+}
+
+partition "Famille 7 : Conformité services" #E3F2FD {
+  if (Catégorie = services\nou mixte ?) then (Oui)
+    if (Descriptions de services\nprésentes dans les lignes ?) then (Non)
+      :Ajouter un avertissement\n(SERVICE_DESCRIPTION_MISSING);
+    else (Oui)
+    endif
+  else (Non : biens)
+  endif
+}
+
+:Calculer le score de conformité;
+note right
+  Pénalités :
+  • Critique : **−10 points**
+  • Erreur  : **−5 points**
+  • Avertissement : **−2 points**
+  Score = max(0, (120 − pénalités) / 120 × 100)
+end note
+
+if (Score ≥ 60 ET aucune erreur ?) then (Oui)
+  if (Avertissements ?) then (Oui)
+    :Statut : **conforme\navec avertissements**;
+    #C8E6C9:Retourner le rapport\nde conformité;
+  else (Non)
+    :Statut : **pleinement conforme**;
+    #A5D6A7:Retourner le rapport\nde conformité;
+  endif
+else (Non)
+  :Statut : **non conforme**;
+  #FFCDD2:Retourner le rapport\navec les erreurs;
+endif
+
+stop
+
+@enduml

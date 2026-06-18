@@ -42,39 +42,33 @@ interface DisplayMessage {
 const SUGGESTED_QUESTIONS = [
   {
     icon: <TrendingUp className="h-4 w-4" />,
-    label: "Spending Trends",
-    question:
-      "What are my spending trends over the last few months? Are there any patterns I should know about?",
+    labelKey: "spendingTrends",
+    questionKey: "spendingTrendsQ",
   },
   {
     icon: <PieChart className="h-4 w-4" />,
-    label: "Top Vendors",
-    question:
-      "Who are my top vendors by spending? How much do I spend with each?",
+    labelKey: "topVendors",
+    questionKey: "topVendorsQ",
   },
   {
     icon: <DollarSign className="h-4 w-4" />,
-    label: "Cost Optimization",
-    question:
-      "Based on my invoices, where can I optimize costs or reduce spending?",
+    labelKey: "costOptimization",
+    questionKey: "costOptimizationQ",
   },
   {
     icon: <AlertTriangle className="h-4 w-4" />,
-    label: "Review Needed",
-    question:
-      "Which invoices need human review? What issues were flagged?",
+    labelKey: "reviewNeeded",
+    questionKey: "reviewNeededQ",
   },
   {
     icon: <BarChart3 className="h-4 w-4" />,
-    label: "Monthly Summary",
-    question:
-      "Give me a complete summary of this month's invoices — totals, vendors, and any anomalies.",
+    labelKey: "monthlySummary",
+    questionKey: "monthlySummaryQ",
   },
   {
     icon: <ShieldCheck className="h-4 w-4" />,
-    label: "Financial Health",
-    question:
-      "How is my overall financial health based on the invoice data? Any recommendations?",
+    labelKey: "financialHealth",
+    questionKey: "financialHealthQ",
   },
 ];
 
@@ -186,7 +180,7 @@ export const AIAdvisor = () => {
                 </span>
               </div>
               <p className="text-white/50 text-xs">
-                Powered by AI — Analyzes your real invoice data
+                {t("poweredByAI")}
               </p>
             </div>
           </div>
@@ -198,7 +192,7 @@ export const AIAdvisor = () => {
               className="text-white/60 hover:text-white hover:bg-card/10 gap-1.5 text-xs rounded-lg"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              New Chat
+              {t("newChat")}
             </Button>
           )}
         </div>
@@ -215,33 +209,30 @@ export const AIAdvisor = () => {
                 <Sparkles className="h-8 w-8 text-white" />
               </div>
               <h2 className="text-2xl font-bold text-foreground">
-                AI Financial Advisor
+                {t("aiFinancialAdvisor")}
               </h2>
               <p className="text-muted-foreground max-w-lg text-sm leading-relaxed">
-                Ask me anything about your invoices, spending patterns, vendor
-                analysis, or financial insights. I analyze your{" "}
-                <strong className="text-foreground">real data</strong> to give
-                you accurate answers.
+                {t("aiAdvisorDesc")}
               </p>
             </div>
 
             {/* Suggested Questions */}
             <div className="w-full max-w-2xl mb-6">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 text-center">
-                Try asking about
+                {t("tryAskingAbout")}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {SUGGESTED_QUESTIONS.map((sq, i) => (
                   <button
                     key={i}
-                    onClick={() => sendMessage(sq.question)}
+                    onClick={() => sendMessage(t(sq.questionKey))}
                     className="group flex items-center gap-2.5 p-3 rounded-xl border border-border/80 bg-card hover:border-[#10B981]/40 hover:shadow-md hover:shadow-emerald-100/50 transition-all duration-200 text-left"
                   >
                     <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#10B981]/10 to-[#059669]/10 group-hover:from-[#10B981]/20 group-hover:to-[#059669]/20 flex items-center justify-center flex-shrink-0 text-[#10B981] transition-colors">
                       {sq.icon}
                     </div>
                     <span className="text-sm font-medium text-foreground group-hover:text-[#10B981] transition-colors">
-                      {sq.label}
+                      {t(sq.labelKey)}
                     </span>
                   </button>
                 ))}
@@ -254,21 +245,19 @@ export const AIAdvisor = () => {
                 variant="secondary"
                 className="gap-1.5 text-xs px-3 py-1 rounded-full"
               >
-                <Zap className="h-3 w-3 text-amber-500" /> Real-time analysis
+                <Zap className="h-3 w-3 text-amber-500" /> {t("realTimeAnalysis")}
               </Badge>
               <Badge
                 variant="secondary"
                 className="gap-1.5 text-xs px-3 py-1 rounded-full"
               >
-                <MessageSquare className="h-3 w-3 text-blue-500" /> Multi-turn
-                chat
+                <MessageSquare className="h-3 w-3 text-blue-500" /> {t("multiTurnChat")}
               </Badge>
               <Badge
                 variant="secondary"
                 className="gap-1.5 text-xs px-3 py-1 rounded-full"
               >
-                <ShieldCheck className="h-3 w-3 text-emerald-500" /> Your data
-                only
+                <ShieldCheck className="h-3 w-3 text-emerald-500" /> {t("yourDataOnly")}
               </Badge>
             </div>
           </div>
@@ -360,7 +349,7 @@ export const AIAdvisor = () => {
                 <div className="bg-card border border-border/60 shadow-sm rounded-2xl rounded-bl-sm px-4 py-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs text-muted-foreground">
-                      Analyzing your data...
+                      {t("analyzingData")}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 py-0.5">
@@ -391,11 +380,11 @@ export const AIAdvisor = () => {
             {SUGGESTED_QUESTIONS.map((sq, i) => (
               <button
                 key={i}
-                onClick={() => sendMessage(sq.question)}
+                onClick={() => sendMessage(t(sq.questionKey))}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-muted/50 hover:bg-[#10B981]/10 hover:border-[#10B981]/30 transition-colors text-xs text-muted-foreground hover:text-foreground whitespace-nowrap flex-shrink-0"
               >
                 {sq.icon}
-                {sq.label}
+                {t(sq.labelKey)}
               </button>
             ))}
           </div>
@@ -430,7 +419,7 @@ export const AIAdvisor = () => {
           </Button>
         </div>
         <p className="text-[10px] text-muted-foreground/50 mt-2 text-center">
-          AI analyzes your real invoice data. Responses may take a moment.
+          {t("aiResponseNote")}
         </p>
       </div>
     </div>

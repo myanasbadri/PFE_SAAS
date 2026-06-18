@@ -1,0 +1,123 @@
+@startuml Diagramme_Sequence_Partage_QR_Part2
+title Diagramme de séquence — Partage par QR code (2/2) : Scan et importation
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  database "MongoDB" as db #F3E5F5
+end box
+
+box "Côté Client — Destinataire" #FFF3E0
+  participant "Interface B\n(Next.js / React)" as frontB #FFE0B2
+  actor "Utilisateur B\n(Destinataire)" as userB
+end box
+
+== Partie 2 : Scan et consultation de la facture partagée ==
+
+userB -> frontB : Accéder au module\n« Scan & Import »
+activate frontB
+
+note right of frontB
+  **Composant : ScanImport**
+  ──────────────────────────
+  • Accès à la caméra (getUserMedia)
+  • Upload d'image de QR code
+  • Saisie manuelle du code
+  • Détection multi-résolution
+    (1024, 1600, 2400 px)
+end note
+
+frontB --> userB : Afficher l'interface de scan\n(caméra, upload ou saisie manuelle)
+
+alt Scan par caméra
+  userB -> frontB : Scanner le QR code\navec la caméra
+  frontB -> frontB : Capture vidéo (getUserMedia)\n+ détection multi-résolution\n+ prétraitement en niveaux\nde gris via Canvas
+  frontB -> frontB : Décoder avec **jsQR**
+else Upload d'image
+  userB -> frontB : Uploader l'image du QR code
+  frontB -> frontB : Décoder l'image\navec **jsQR**
+else Saisie manuelle
+  userB -> frontB : Saisir le code\nINV-A3X9K2B7
+end
+
+frontB -> frontB : Extraire le share_code\n(regex : /INV-[A-Z0-9]{6,}/)
+
+frontB -> api : **GET /api/invoices/lookup/{share_code}**\nHeaders : Authorization
+activate api
+
+api -> api : @token_required\n(pas de @org_required)
+
+api -> db : **invoices.find_one(**\n  { share_code: "INV-A3X9K2B7" }\n**)**
+activate db
+db --> api : Document facture source
+deactivate db
+
+alt Facture non trouvée
+  api --> frontB : **404 Not Found**\n{ error: "Invoice not found" }
+  frontB --> userB : Afficher « Code invalide\nou facture introuvable »
+else Facture trouvée
+
+  api --> frontB : **200 OK**\n{ invoice: { données sanitisées } }
+  deactivate api
+
+  frontB --> userB : Afficher l'aperçu\nde la facture partagée
+
+  == Partie 3 : Importation dans l'organisation de B ==
+
+  userB -> frontB : Cliquer sur « Importer »
+
+  frontB -> api : **POST /api/invoices/import/{share_code}**\nHeaders : Authorization, X-Org-Id
+  activate api
+
+  api -> api : @token_required\n@org_required
+
+  api -> db : Rechercher la facture source\npar share_code
+  activate db
+  db --> api : Document facture source
+  deactivate db
+
+  alt Même organisation (auto-import)
+    api --> frontB : **409 Conflict**\n{ error: "Cannot import\nyour own invoice" }
+    frontB --> userB : Afficher erreur
+  else Déjà importée (doublon)
+    api --> frontB : **409 Conflict**\n{ error: "Already imported" }
+    frontB --> userB : Afficher erreur
+  else Import autorisé
+
+    note right of api
+      Nouvelle facture :
+      ──────────────────
+      • org_id : organisation de B
+      • share_code : nouveau code unique
+      • imported_from : "INV-A3X9K2B7"
+      • imported_at : timestamp
+      • tags : ["imported"]
+      • data : copie intégrale
+    end note
+
+    api -> db : **invoices.insert_one(**\n  { nouvelle facture }\n**)**
+    activate db
+    db --> api : new_id
+    deactivate db
+
+    api -> db : **activity.insert_one(**\n  { action: "import",\n    share_code, method:\n    "qr_scan" }\n**)**
+    activate db
+    db --> api : OK
+    deactivate db
+
+    api --> frontB : **201 Created**\n{ success: true,\n  invoice_id: new_id }
+    deactivate api
+
+    frontB --> userB : Afficher confirmation\n« Facture importée\navec succès »
+
+  end
+end
+
+deactivate frontB
+
+@enduml

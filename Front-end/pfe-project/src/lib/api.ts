@@ -39,6 +39,15 @@ async function request<T>(
   const data = await res.json();
 
   if (!res.ok) {
+    // Auto-logout if account is disabled
+    if (res.status === 403 && data.error?.includes("disabled")) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        localStorage.removeItem("currentOrgId");
+        window.location.href = "/";
+      }
+    }
     throw new ApiError(data.error || "Something went wrong", res.status, data);
   }
 
@@ -122,8 +131,29 @@ export async function register(data: RegisterData) {
   });
 }
 
+export async function googleLogin(accessToken: string) {
+  return request<AuthResponse>("/api/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+}
+
 export async function getMe() {
   return request<MeResponse>("/api/auth/me");
+}
+
+export async function forgotPassword(email: string) {
+  return request<{ success: boolean; message: string; dev_code?: string }>(
+    "/api/auth/forgot-password",
+    { method: "POST", body: JSON.stringify({ email }) }
+  );
+}
+
+export async function resetPassword(email: string, code: string, new_password: string) {
+  return request<{ success: boolean; message: string }>(
+    "/api/auth/reset-password",
+    { method: "POST", body: JSON.stringify({ email, code, new_password }) }
+  );
 }
 
 // ── Invoices ────────────────────────────────────────────────────────────────
@@ -249,6 +279,22 @@ export async function getInvoiceById(id: string) {
   return request<InvoiceResponse>(`/api/invoices/${id}`);
 }
 
+export async function getInvoiceFile(id: string): Promise<Blob> {
+  const token = localStorage.getItem("token");
+  const orgId = localStorage.getItem("organizationId");
+  const res = await fetch(`${API_BASE}/api/invoices/${id}/file`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(orgId ? { "X-Org-Id": orgId } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: "Failed to fetch file" }));
+    throw new ApiError(data.error || `HTTP ${res.status}`, res.status, data);
+  }
+  return res.blob();
+}
+
 export async function updateInvoice(
   id: string,
   payload: { data?: Invoice["data"]; tags?: string[]; status?: string }
@@ -336,16 +382,33 @@ interface ExtractAsyncResponse {
   task_id: string;
 }
 
-type ExtractResponse = ExtractSyncResponse | ExtractAsyncResponse;
+interface ExtractPollResponse {
+  success: boolean;
+  message: string;
+  mode: "poll";
+  invoice_id: string;
+}
+
+type ExtractResponse = ExtractSyncResponse | ExtractAsyncResponse | ExtractPollResponse;
 
 export async function extractFile(file: File, lang: string = "auto") {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("lang", lang);
-  return request<ExtractResponse>("/api/extract-file", {
-    method: "POST",
-    body: formData,
-  });
+
+  // Use a 3-minute timeout to avoid the browser silently dropping the request
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180_000);
+
+  try {
+    return await request<ExtractResponse>("/api/extract-file", {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 interface TaskStatusResponse {
@@ -771,6 +834,21 @@ export async function acceptInvitation(inviteToken: string) {
   return request<{ success: boolean; org: Org }>(
     `/api/invitations/${inviteToken}/accept`,
     { method: "POST" }
+  );
+}
+
+export interface MyInvitation {
+  id: string;
+  token: string;
+  org_id: string;
+  org_name: string;
+  role: string;
+  created_at: string;
+}
+
+export async function getMyInvitations() {
+  return request<{ success: boolean; invitations: MyInvitation[] }>(
+    "/api/invitations/my"
   );
 }
 

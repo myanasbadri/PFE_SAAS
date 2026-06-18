@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartInvoice AI — Présentation PFE 2025-2026</title>
+
+    <!-- reveal.js 4.6.1 CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/theme/white.min.css" id="theme">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --navy: #0A2540;
+            --blue: #2E75B6;
+            --emerald: #10B981;
+            --white: #FFFFFF;
+            --gray-light: #F5F7FA;
+            --gray-mid: #E2E8F0;
+        }
+
+        .reveal {
+            font-family: 'Inter', Arial, sans-serif;
+        }
+
+        .reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 700;
+            text-transform: none;
+            letter-spacing: -0.02em;
+        }
+
+        .reveal h1 { font-size: 2.8em; }
+        .reveal h2 { font-size: 2.0em; margin-bottom: 0.6em; }
+        .reveal h3 { font-size: 1.4em; }
+
+        .reveal p, .reveal li {
+            font-size: 0.85em;
+            line-height: 1.6;
+        }
+
+        .reveal ul { list-style: none; padding-left: 0; }
+        .reveal ul li { margin-bottom: 0.5em; padding-left: 1.5em; position: relative; }
+        .reveal ul li::before {
+            content: "▸";
+            color: var(--emerald);
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+
+        /* Slide backgrounds */
+        .slide-navy { color: var(--white) !important; }
+        .slide-navy h1, .slide-navy h2, .slide-navy h3, .slide-navy h4,
+        .slide-navy p, .slide-navy li, .slide-navy span {
+            color: var(--white) !important;
+        }
+        .slide-navy ul li::before { color: var(--emerald) !important; }
+
+        .slide-white { color: var(--navy) !important; }
+        .slide-white h1, .slide-white h2, .slide-white h3, .slide-white h4 {
+            color: var(--navy) !important;
+        }
+
+        /* Section dividers */
+        .section-number {
+            font-size: 5em;
+            font-weight: 900;
+            color: var(--emerald);
+            opacity: 0.3;
+            position: absolute;
+            top: 0.2em;
+            right: 0.3em;
+        }
+
+        /* Tables */
+        .reveal table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.65em;
+            margin: 0.5em 0;
+        }
+        .reveal table th {
+            background: var(--navy);
+            color: var(--white);
+            padding: 0.6em 0.8em;
+            font-weight: 600;
+            text-align: left;
+        }
+        .reveal table td {
+            padding: 0.5em 0.8em;
+            border-bottom: 1px solid var(--gray-mid);
+        }
+        .reveal table tr:nth-child(even) td {
+            background: var(--gray-light);
+        }
+        .reveal table .check { color: var(--emerald); font-weight: bold; }
+        .reveal table .cross { color: #EF4444; font-weight: bold; }
+        .reveal table .partial { color: #F59E0B; font-weight: bold; }
+
+        /* Two columns */
+        .two-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2em;
+            text-align: left;
+        }
+        .three-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1.5em;
+            text-align: left;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 1.2em;
+            box-shadow: 0 4px 20px rgba(10,37,64,0.08);
+            border: 1px solid var(--gray-mid);
+        }
+        .card-dark {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 1.2em;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.2em 0.7em;
+            border-radius: 20px;
+            font-size: 0.6em;
+            font-weight: 600;
+            margin: 0.2em;
+        }
+        .badge-blue { background: rgba(46,117,182,0.15); color: var(--blue); }
+        .badge-green { background: rgba(16,185,129,0.15); color: var(--emerald); }
+        .badge-navy { background: rgba(10,37,64,0.1); color: var(--navy); }
+
+        /* KPI boxes */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1em;
+        }
+        .kpi-box {
+            text-align: center;
+            padding: 1em;
+            border-radius: 12px;
+            background: var(--gray-light);
+            border: 1px solid var(--gray-mid);
+        }
+        .kpi-box .number {
+            font-size: 2.2em;
+            font-weight: 800;
+            color: var(--blue);
+            display: block;
+        }
+        .kpi-box .label {
+            font-size: 0.6em;
+            color: #64748B;
+            margin-top: 0.3em;
+            display: block;
+        }
+
+        /* Timeline */
+        .timeline {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            margin: 1em 0;
+        }
+        .timeline-item {
+            flex: 1;
+            padding: 1em;
+            text-align: center;
+            position: relative;
+            border-radius: 8px;
+        }
+        .timeline-item::after {
+            content: "→";
+            position: absolute;
+            right: -0.6em;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5em;
+            color: var(--emerald);
+            z-index: 1;
+        }
+        .timeline-item:last-child::after { display: none; }
+
+        /* Pipeline arrow flow */
+        .pipeline {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3em;
+            flex-wrap: wrap;
+        }
+        .pipeline-step {
+            background: var(--white);
+            border: 2px solid var(--blue);
+            border-radius: 8px;
+            padding: 0.5em 0.8em;
+            font-size: 0.6em;
+            font-weight: 600;
+            color: var(--navy);
+        }
+        .pipeline-arrow {
+            font-size: 1.2em;
+            color: var(--emerald);
+            font-weight: bold;
+        }
+
+        /* Subtitle */
+        .subtitle {
+            color: var(--blue) !important;
+            font-size: 1.1em !important;
+            font-weight: 500;
+            margin-bottom: 1em !important;
+        }
+
+        /* Tag line */
+        .tagline {
+            font-size: 0.7em;
+            opacity: 0.7;
+            margin-top: 1em;
+        }
+
+        /* Icon large */
+        .icon-lg { font-size: 2em; margin-bottom: 0.3em; display: block; }
+
+        /* Progress bar color */
+        .reveal .progress span { background: var(--emerald); }
+
+        /* Slide number */
+        .reveal .slide-number {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            color: rgba(10,37,64,0.5);
+        }
+
+        /* SVG styles */
+        .diagram-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 1em 0;
+        }
+
+        /* Fallback diagram */
+        .fallback-flow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5em;
+        }
+        .fallback-node {
+            padding: 0.6em 1.5em;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.7em;
+            width: 280px;
+            text-align: center;
+        }
+        .fallback-arrow {
+            font-size: 1.2em;
+            color: var(--emerald);
+        }
+        .fallback-label {
+            font-size: 0.55em;
+            color: #64748B;
+            font-style: italic;
+        }
+
+        /* Print PDF styles */
+        @media print {
+            .reveal .slides section {
+                page-break-after: always !important;
+                page-break-inside: avoid !important;
+            }
+            .reveal .progress, .reveal .controls { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- ============================================ -->
+            <!-- SLIDE 1: PAGE DE GARDE -->
+            <!-- ============================================ -->
+            <section data-background-color="#0A2540" class="slide-navy">
+                <div style="margin-top: 1em;">
+                    <p style="font-size: 0.7em; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.7; margin-bottom: 0.5em;">Projet de Fin d'Études 2025-2026</p>
+                    <h1 style="font-size: 2.4em; margin-bottom: 0.1em;">SmartInvoice AI</h1>
+                    <p style="font-size: 1em; color: #10B981 !important; font-weight: 500; margin-bottom: 1.5em;">Plateforme SaaS multi-tenant de gestion intelligente<br>des factures avec conformité fiscale tunisienne</p>
+                    <div style="margin-top: 2em; font-size: 0.7em; opacity: 0.8;">
+                        <p><strong>Réalisé par :</strong> Anas Badri</p>
+                        <p><strong>Encadrant académique :</strong> [Nom de l'encadrant]</p>
+                        <p><strong>Encadrant professionnel :</strong> [Nom de l'encadrant]</p>
+                        <p style="margin-top: 0.8em; opacity: 0.6;">[Université / École] — Département Informatique</p>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Bonjour à tous. Je suis Anas Badri et je vais vous présenter mon projet de fin d'études intitulé SmartInvoice AI. Il s'agit d'une plateforme SaaS de gestion intelligente des factures, conçue spécifiquement pour répondre aux exigences de conformité fiscale tunisienne.
+                </aside>
+            </section>
+
+            <!-- ============================================ -->
+            <!-- SLIDE 2: PLAN / SOMMAIRE -->
+            <!-- ============================================ -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <h2>Plan de la présentation</h2>
+                <div style="text-align: left; max-width: 700px; margin: 0 auto;">
+                    <div style="display: flex; align-items: center; margin-bottom: 1em; padding: 0.6em; border-radius: 8px; background: var(--gray-light);">
+                        <span style="font-size: 1.5em; font-weight: 800; color: var(--blue); margin-right: 0.6em;">01</span>
+                        <span style="font-size: 0.9em;">Contexte et problématique</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 1em; padding: 0.6em; border-radius: 8px;">
+                        <span style="font-size: 1.5em; font-weight: 800; color: var(--blue); margin-right: 0.6em;">02</span>
+                        <span style="font-size: 0.9em;">Méthodologie et architecture technique</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 1em; padding: 0.6em; border-radius: 8px; background: var(--gray-light);">
+                        <span style="font-size: 1.5em; font-weight: 800; color: var(--blue); margin-right: 0.6em;">03</span>
+                        <span style="font-size: 0.9em;">Sprint 1 — Authentification & Multi-tenancy</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 1em; padding: 0.6em; border-radius: 8px;">
+                        <span style="font-size: 1.5em; font-weight: 800; color: var(--blue); margin-right: 0.6em;">04</span>
+                        <span style="font-size: 0.9em;">Sprint 2 — Gestion des factures & Extraction IA</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 1em; padding: 0.6em; border-radius: 8px; background: var(--gray-light);">
+                        <span style="font-size: 1.5em; font-weight: 800; color: var(--blue); margin-right: 0.6em;">05</span>
+                        <span style="font-size: 0.9em;">Sprint 3 — Fonctionnalités avancées & Conclusion</span>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Voici le plan de notre présentation. Nous commencerons par le contexte et la problématique, puis nous aborderons la méthodologie adoptée. Ensuite, nous détaillerons les réalisations de chaque sprint avant de conclure avec un bilan et les perspectives.
+                </aside>
+            </section>
+
+            <!-- ============================================ -->
+            <!-- SECTION 1: CONTEXTE -->
+            <!-- ============================================ -->
+
+            <!-- SLIDE 3: Problématique -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">01</span>
+                <h2>Problématique</h2>
+                <p class="subtitle">La transformation numérique fiscale en Tunisie</p>
+                <div class="two-cols">
+                    <div>
+                        <div class="card">
+                            <p style="font-size: 0.75em;"><strong style="color: var(--blue);">Loi de Finances 2026</strong></p>
+                            <ul style="font-size: 0.7em;">
+                                <li>Obligation de facturation électronique (El Fatoora)</li>
+                                <li>Certificats de retenue à la source (TEJ) obligatoires</li>
+                                <li>Schéma XSD normalisé 2026.1.0</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="card">
+                            <p style="font-size: 0.75em;"><strong style="color: var(--blue);">Défis des entreprises</strong></p>
+                            <ul style="font-size: 0.7em;">
+                                <li>Traitement manuel des factures (erreurs, lenteur)</li>
+                                <li>Complexité des 7 catégories de retenue</li>
+                                <li>Absence de solutions locales adaptées</li>
+                                <li>Besoin de conformité immédiate</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <aside class="notes">
+                    La loi de finances tunisienne 2026 impose de nouvelles obligations en matière de facturation électronique via le système El Fatoora. Les entreprises doivent désormais émettre des certificats de retenue à la source conformes au schéma XSD officiel. Face à l'absence de solutions locales adaptées, nous avons identifié un besoin réel d'une plateforme intelligente et conforme.
+                </aside>
+            </section>
+
+            <!-- SLIDE 4: Étude comparative -->
+            <section data-background-color="#F5F7FA" class="slide-white">
+                <span class="section-number">01</span>
+                <h2>Étude comparative</h2>
+                <p class="subtitle">Positionnement face aux solutions existantes</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Critère</th>
+                            <th>QuickBooks</th>
+                            <th>Sage</th>
+                            <th>Solutions locales</th>
+                            <th style="background: var(--emerald);">SmartInvoice AI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Conformité fiscale TN</td>
+                            <td class="cross">✗</td>
+                            <td class="partial">Partiel</td>
+                            <td class="check">✓</td>
+                            <td class="check">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Extraction IA</td>
+                            <td class="cross">✗</td>
+                            <td class="cross">✗</td>
+                            <td class="cross">✗</td>
+                            <td class="check">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Génération TEJ (XSD)</td>
+                            <td class="cross">✗</td>
+                            <td class="cross">✗</td>
+                            <td class="partial">Manuel</td>
+                            <td class="check">✓ Auto</td>
+                        </tr>
+                        <tr>
+                            <td>Multi-tenant SaaS</td>
+                            <td class="check">✓</td>
+                            <td class="check">✓</td>
+                            <td class="cross">✗</td>
+                            <td class="check">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Conseiller IA</td>
+                            <td class="cross">✗</td>
+                            <td class="cross">✗</td>
+                            <td class="cross">✗</td>
+                            <td class="check">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Trilingue (FR/AR/EN)</td>
+                            <td class="partial">EN only</td>
+                            <td class="partial">FR/EN</td>
+                            <td class="partial">FR/AR</td>
+                            <td class="check">✓</td>
+                        </tr>
+                        <tr>
+                            <td>Coût</td>
+                            <td>$$$</td>
+                            <td>$$$</td>
+                            <td>$$</td>
+                            <td style="color: var(--emerald); font-weight: 600;">SaaS abordable</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <aside class="notes">
+                    Ce tableau montre clairement le positionnement de SmartInvoice AI. Les solutions internationales comme QuickBooks et Sage ne prennent pas en charge la conformité fiscale tunisienne. Les solutions locales existantes manquent d'intelligence artificielle et d'architecture SaaS moderne. Notre plateforme est la seule à combiner tous ces critères.
+                </aside>
+            </section>
+
+            <!-- SLIDE 5: Notre solution -->
+            <section data-background-color="#0A2540" class="slide-navy">
+                <span class="section-number" style="color: rgba(16,185,129,0.2);">01</span>
+                <h2>Notre solution</h2>
+                <p class="subtitle" style="color: #10B981 !important;">5 différenciateurs clés</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em; max-width: 800px; margin: 0 auto;">
+                    <div class="card-dark">
+                        <span class="icon-lg">🤖</span>
+                        <p style="font-size: 0.7em; font-weight: 600;">Extraction IA intelligente</p>
+                        <p style="font-size: 0.55em; opacity: 0.7;">Triple fallback : Ollama → Groq → Template</p>
+                    </div>
+                    <div class="card-dark">
+                        <span class="icon-lg">📋</span>
+                        <p style="font-size: 0.7em; font-weight: 600;">Conformité automatisée</p>
+                        <p style="font-size: 0.55em; opacity: 0.7;">7 catégories de validation fiscale</p>
+                    </div>
+                    <div class="card-dark">
+                        <span class="icon-lg">📄</span>
+                        <p style="font-size: 0.7em; font-weight: 600;">Certificats TEJ</p>
+                        <p style="font-size: 0.55em; opacity: 0.7;">Génération XML conforme XSD 2026.1.0</p>
+                    </div>
+                    <div class="card-dark">
+                        <span class="icon-lg">💬</span>
+                        <p style="font-size: 0.7em; font-weight: 600;">Conseiller financier IA</p>
+                        <p style="font-size: 0.55em; opacity: 0.7;">Chat conversationnel contextuel</p>
+                    </div>
+                    <div class="card-dark" style="grid-column: 1 / -1;">
+                        <span style="font-size: 1.5em;">🔒</span>
+                        <span style="font-size: 0.7em; font-weight: 600; margin-left: 0.5em;">Architecture multi-tenant</span>
+                        <span style="font-size: 0.55em; opacity: 0.7; margin-left: 0.5em;">Isolation complète par org_id + support trilingue (FR/AR/EN)</span>
+                    </div>
+                </div>
+                <aside class="notes">
+                    SmartInvoice AI se distingue par cinq innovations majeures. Premièrement, l'extraction intelligente par IA avec un système de triple fallback assurant la disponibilité. Deuxièmement, un moteur de conformité automatisé. Troisièmement, la génération automatique de certificats TEJ. Quatrièmement, un conseiller financier conversationnel. Et enfin, une architecture multi-tenant sécurisée.
+                </aside>
+            </section>
+
+            <!-- ============================================ -->
+            <!-- SECTION 2: MÉTHODOLOGIE -->
+            <!-- ============================================ -->
+
+            <!-- SLIDE 6: Scrum + Sprints -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">02</span>
+                <h2>Méthodologie Scrum</h2>
+                <p class="subtitle">3 sprints itératifs et incrémentaux</p>
+                <div class="timeline" style="margin-top: 1.5em;">
+                    <div class="timeline-item" style="background: rgba(46,117,182,0.1); border: 2px solid var(--blue);">
+                        <p style="font-size: 0.65em; font-weight: 700; color: var(--blue);">Sprint 1</p>
+                        <p style="font-size: 0.55em; font-weight: 600;">Auth & Multi-tenancy</p>
+                        <p style="font-size: 0.5em; color: #64748B;">29 Story Points</p>
+                        <span class="badge badge-blue">4 semaines</span>
+                    </div>
+                    <div class="timeline-item" style="background: rgba(16,185,129,0.1); border: 2px solid var(--emerald);">
+                        <p style="font-size: 0.65em; font-weight: 700; color: var(--emerald);">Sprint 2</p>
+                        <p style="font-size: 0.55em; font-weight: 600;">Factures & IA</p>
+                        <p style="font-size: 0.5em; color: #64748B;">52 Story Points</p>
+                        <span class="badge badge-green">5 semaines</span>
+                    </div>
+                    <div class="timeline-item" style="background: rgba(10,37,64,0.08); border: 2px solid var(--navy);">
+                        <p style="font-size: 0.65em; font-weight: 700; color: var(--navy);">Sprint 3</p>
+                        <p style="font-size: 0.55em; font-weight: 600;">TEJ & Avancé</p>
+                        <p style="font-size: 0.5em; color: #64748B;">70 Story Points</p>
+                        <span class="badge badge-navy">6 semaines</span>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5em; text-align: center;">
+                    <p style="font-size: 0.65em; color: #64748B;">Total : <strong>151 Story Points</strong> réalisés sur 15 semaines</p>
+                </div>
+                <aside class="notes">
+                    Nous avons adopté la méthodologie Scrum avec trois sprints de complexité croissante. Le premier sprint de 29 points a posé les fondations avec l'authentification. Le deuxième sprint de 52 points a introduit le coeur métier et l'IA. Le troisième sprint de 70 points a complété la plateforme avec les fonctionnalités avancées. Au total, 151 story points livrés.
+                </aside>
+            </section>
+
+            <!-- SLIDE 7: Stack technique -->
+            <section data-background-color="#F5F7FA" class="slide-white">
+                <span class="section-number">02</span>
+                <h2>Architecture technique</h2>
+                <div class="two-cols" style="margin-top: 1em;">
+                    <div>
+                        <div class="card" style="margin-bottom: 1em;">
+                            <p style="font-size: 0.7em; font-weight: 700; color: var(--blue);">🖥️ Frontend</p>
+                            <ul style="font-size: 0.6em;">
+                                <li>Next.js 16 / React 19</li>
+                                <li>TypeScript strict</li>
+                                <li>Tailwind CSS 4</li>
+                                <li>62+ composants React</li>
+                            </ul>
+                        </div>
+                        <div class="card">
+                            <p style="font-size: 0.7em; font-weight: 700; color: var(--blue);">🤖 Intelligence Artificielle</p>
+                            <ul style="font-size: 0.6em;">
+                                <li>Ollama (qwen2.5:7b local)</li>
+                                <li>Groq (llama-3.3-70b cloud)</li>
+                                <li>Pipeline OCR + NLP</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="card" style="margin-bottom: 1em;">
+                            <p style="font-size: 0.7em; font-weight: 700; color: var(--blue);">⚙️ Backend</p>
+                            <ul style="font-size: 0.6em;">
+                                <li>Flask Python 3.10</li>
+                                <li>70+ endpoints REST</li>
+                                <li>18 modules de services</li>
+                                <li>Celery (tâches async)</li>
+                            </ul>
+                        </div>
+                        <div class="card">
+                            <p style="font-size: 0.7em; font-weight: 700; color: var(--blue);">💾 Data & Infra</p>
+                            <ul style="font-size: 0.6em;">
+                                <li>MongoDB 7 (8 collections)</li>
+                                <li>Redis 7 (cache + sessions)</li>
+                                <li>Docker Compose (5 conteneurs)</li>
+                                <li>Déploiement Railway</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Notre stack technique combine des technologies modernes et performantes. Le frontend utilise Next.js 16 avec React 19 et TypeScript pour la robustesse. Le backend Flask expose plus de 70 endpoints REST organisés en 18 modules. Pour l'IA, nous utilisons un système à double modèle avec Ollama en local et Groq en cloud. L'infrastructure Docker Compose orchestre 5 conteneurs déployés sur Railway.
+                </aside>
+            </section>
+
+            <!-- ============================================ -->
+            <!-- SECTION 3: SPRINT 1 -->
+            <!-- ============================================ -->
+
+            <!-- SLIDE 8: Sprint 1 - Objectif -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">03</span>
+                <h2>Sprint 1 — Objectif</h2>
+                <p class="subtitle">Authentification & Multi-tenancy (29 SP)</p>
+                <div class="two-cols">
+                    <div>
+                        <p style="font-size: 0.75em; font-weight: 600; color: var(--navy);">User Stories principales</p>
+                        <ul style="font-size: 0.65em;">
+                            <li>Inscription avec création d'organisation</li>
+                            <li>Connexion JWT avec refresh tokens</li>
+                            <li>Gestion des rôles (admin, comptable, lecteur)</li>
+                            <li>Isolation des données par org_id</li>
+                            <li>Invitation de membres par email</li>
+                            <li>Profil utilisateur et préférences</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="card" style="text-align: center;">
+                            <p style="font-size: 0.7em; font-weight: 600; color: var(--emerald);">Livrables clés</p>
+                            <div style="margin-top: 0.8em;">
+                                <span class="badge badge-blue">JWT + Refresh</span>
+                                <span class="badge badge-green">RBAC 3 rôles</span>
+                                <span class="badge badge-navy">Multi-tenant</span>
+                                <span class="badge badge-blue">API Auth</span>
+                                <span class="badge badge-green">Middleware</span>
+                                <span class="badge badge-navy">Invitations</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Le premier sprint avait pour objectif de construire les fondations sécurisées de la plateforme. Les user stories couvrent l'inscription, l'authentification JWT, la gestion des rôles à trois niveaux et surtout l'isolation multi-tenant qui garantit que chaque organisation n'accède qu'à ses propres données.
+                </aside>
+            </section>
+
+            <!-- SLIDE 9: Sprint 1 - Diagramme -->
+            <section data-background-color="#F5F7FA" class="slide-white">
+                <span class="section-number">03</span>
+                <h2>Diagramme de séquence</h2>
+                <p class="subtitle">Flux d'authentification et isolation multi-tenant</p>
+                <div class="diagram-container">
+                    <svg width="750" height="340" viewBox="0 0 750 340" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Actors -->
+                        <rect x="60" y="10" width="100" height="35" rx="5" fill="#2E75B6" />
+                        <text x="110" y="32" text-anchor="middle" fill="white" font-size="12" font-weight="600">Client</text>
+                        <rect x="250" y="10" width="100" height="35" rx="5" fill="#0A2540" />
+                        <text x="300" y="32" text-anchor="middle" fill="white" font-size="12" font-weight="600">API Gateway</text>
+                        <rect x="440" y="10" width="100" height="35" rx="5" fill="#0A2540" />
+                        <text x="490" y="32" text-anchor="middle" fill="white" font-size="12" font-weight="600">Auth Service</text>
+                        <rect x="620" y="10" width="100" height="35" rx="5" fill="#10B981" />
+                        <text x="670" y="32" text-anchor="middle" fill="white" font-size="12" font-weight="600">MongoDB</text>
+
+                        <!-- Lifelines -->
+                        <line x1="110" y1="45" x2="110" y2="330" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="4"/>
+                        <line x1="300" y1="45" x2="300" y2="330" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="4"/>
+                        <line x1="490" y1="45" x2="490" y2="330" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="4"/>
+                        <line x1="670" y1="45" x2="670" y2="330" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="4"/>
+
+                        <!-- Step 1: Login -->
+                        <line x1="110" y1="75" x2="300" y2="75" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+                        <text x="205" y="68" text-anchor="middle" fill="#0A2540" font-size="10">POST /auth/login</text>
+
+                        <!-- Step 2: Validate -->
+                        <line x1="300" y1="105" x2="490" y2="105" stroke="#2E75B6" stroke-width="2" marker-end="url(#arrow)"/>
+                        <text x="395" y="98" text-anchor="middle" fill="#0A2540" font-size="10">Valider credentials</text>
+
+                        <!-- Step 3: Check DB -->
+                        <line x1="490" y1="135" x2="670" y2="135" stroke="#10B981" stroke-width="2" marker-end="url(#arrow)"/>
+                        <text x="580" y="128" text-anchor="middle" fill="#0A2540" font-size="10">Find user + org_id</text>
+
+                        <!-- Step 4: Return user -->
+                        <line x1="670" y1="165" x2="490" y2="165" stroke="#10B981" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow)"/>
+                        <text x="580" y="158" text-anchor="middle" fill="#64748B" font-size="10">User document</text>
+
+                        <!-- Step 5: Generate JWT -->
+                        <rect x="440" y="180" width="100" height="25" rx="3" fill="#FEF3C7" stroke="#F59E0B"/>
+                        <text x="490" y="197" text-anchor="middle" fill="#92400E" font-size="9">Générer JWT</text>
+                        <text x="490" y="220" text-anchor="middle" fill="#64748B" font-size="9">{user_id, org_id, role}</text>
+
+                        <!-- Step 6: Return JWT -->
+                        <line x1="490" y1="235" x2="300" y2="235" stroke="#2E75B6" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow)"/>
+                        <text x="395" y="228" text-anchor="middle" fill="#64748B" font-size="10">JWT + Refresh token</text>
+
+                        <!-- Step 7: Return to client -->
+                        <line x1="300" y1="265" x2="110" y2="265" stroke="#2E75B6" stroke-width="2" stroke-dasharray="4" marker-end="url(#arrow)"/>
+                        <text x="205" y="258" text-anchor="middle" fill="#64748B" font-size="10">200 OK + tokens</text>
+
+                        <!-- Step 8: Request with JWT -->
+                        <line x1="110" y1="300" x2="300" y2="300" stroke="#10B981" stroke-width="2" marker-end="url(#arrow)"/>
+                        <text x="205" y="293" text-anchor="middle" fill="#0A2540" font-size="10">GET /invoices (Bearer JWT)</text>
+
+                        <!-- Note -->
+                        <rect x="320" y="290" width="180" height="30" rx="3" fill="#ECFDF5" stroke="#10B981"/>
+                        <text x="410" y="309" text-anchor="middle" fill="#065F46" font-size="9">Filtre auto: org_id du JWT</text>
+
+                        <!-- Arrow marker -->
+                        <defs>
+                            <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#2E75B6"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+                <aside class="notes">
+                    Ce diagramme de séquence illustre le flux d'authentification. L'utilisateur envoie ses identifiants, le service d'authentification vérifie en base, génère un JWT contenant l'org_id, et renvoie les tokens. Pour chaque requête ultérieure, le middleware extrait l'org_id du JWT pour filtrer automatiquement les données, assurant l'isolation multi-tenant.
+                </aside>
+            </section>
+
+            <!-- SLIDE 10: Sprint 1 - Fonctionnalités -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">03</span>
+                <h2>Sprint 1 — Réalisations</h2>
+                <div class="two-cols">
+                    <div>
+                        <p style="font-size: 0.75em; font-weight: 600; color: var(--navy); margin-bottom: 0.5em;">🔐 Sécurité</p>
+                        <ul style="font-size: 0.63em;">
+                            <li>JWT avec expiration 15min + refresh 7j</li>
+                            <li>Hashage bcrypt des mots de passe</li>
+                            <li>RBAC : admin, comptable, lecteur</li>
+                            <li>Rate limiting (100 req/min)</li>
+                        </ul>
+                        <p style="font-size: 0.75em; font-weight: 600; color: var(--navy); margin-top: 1em; margin-bottom: 0.5em;">🏢 Multi-tenancy</p>
+                        <ul style="font-size: 0.63em;">
+                            <li>Isolation par org_id dans chaque document</li>
+                            <li>Middleware de filtrage automatique</li>
+                            <li>Impossible d'accéder aux données d'une autre organisation</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="card" style="background: var(--gray-light); text-align: center; padding: 1.5em;">
+                            <p style="font-size: 0.65em; font-weight: 600; margin-bottom: 1em;">Interface de connexion</p>
+                            <div style="background: white; border-radius: 8px; padding: 1em; border: 1px solid var(--gray-mid);">
+                                <div style="width: 100%; height: 12px; background: var(--navy); border-radius: 4px 4px 0 0; margin-bottom: 0.8em;"></div>
+                                <div style="width: 60%; height: 8px; background: var(--gray-mid); border-radius: 2px; margin: 0.5em auto;"></div>
+                                <div style="width: 80%; height: 30px; background: var(--gray-light); border: 1px solid var(--gray-mid); border-radius: 4px; margin: 0.5em auto;"></div>
+                                <div style="width: 80%; height: 30px; background: var(--gray-light); border: 1px solid var(--gray-mid); border-radius: 4px; margin: 0.5em auto;"></div>
+                                <div style="width: 80%; height: 28px; background: var(--blue); border-radius: 4px; margin: 0.8em auto;"></div>
+                                <p style="font-size: 0.5em; color: #64748B; margin-top: 0.5em;">[ Capture d'écran réelle à insérer ]</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Les réalisations du sprint 1 incluent un système d'authentification robuste avec JWT, refresh tokens et hashage bcrypt. Le contrôle d'accès basé sur les rôles offre trois niveaux de permissions. L'architecture multi-tenant garantit une isolation totale des données grâce à un middleware qui filtre automatiquement toutes les requêtes par org_id.
+                </aside>
+            </section>
+
+            <!-- ============================================ -->
+            <!-- SECTION 4: SPRINT 2 -->
+            <!-- ============================================ -->
+
+            <!-- SLIDE 11: Sprint 2 - Objectif -->
+            <section data-background-color="#0A2540" class="slide-navy">
+                <span class="section-number" style="color: rgba(16,185,129,0.2);">04</span>
+                <h2>Sprint 2 — Objectif</h2>
+                <p class="subtitle" style="color: #10B981 !important;">Gestion des factures & Extraction IA (52 SP)</p>
+                <div class="two-cols" style="margin-top: 1em;">
+                    <div>
+                        <p style="font-size: 0.75em; font-weight: 600;">User Stories</p>
+                        <ul style="font-size: 0.63em;">
+                            <li>Upload de factures (PDF, image)</li>
+                            <li>Extraction automatique des données par IA</li>
+                            <li>Validation de conformité en temps réel</li>
+                            <li>CRUD complet des factures</li>
+                            <li>Recherche et filtrage avancés</li>
+                            <li>Calcul automatique des taxes</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="card-dark" style="text-align: center;">
+                            <p style="font-size: 2.5em; margin-bottom: 0.2em;">🧠</p>
+                            <p style="font-size: 0.75em; font-weight: 600;">Coeur intelligent</p>
+                            <p style="font-size: 0.6em; opacity: 0.7; margin-top: 0.5em;">Le sprint 2 introduit l'intelligence artificielle au centre du processus de gestion des factures</p>
+                        </div>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Le sprint 2 représente le coeur fonctionnel de SmartInvoice AI. L'objectif principal est d'automatiser le traitement des factures grâce à l'intelligence artificielle, depuis l'upload jusqu'à la validation de conformité. C'est le sprint le plus innovant avec l'introduction du pipeline d'extraction IA.
+                </aside>
+            </section>
+
+            <!-- SLIDE 12: Pipeline IA -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">04</span>
+                <h2>Pipeline d'extraction IA</h2>
+                <p class="subtitle">Du document brut à la facture structurée</p>
+                <div class="pipeline" style="margin: 1.5em 0;">
+                    <div class="pipeline-step" style="background: #EFF6FF;">📄 Upload</div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-step" style="background: #FEF3C7;">🔍 OCR</div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-step" style="background: #ECFDF5;">🤖 LLM</div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-step" style="background: #F0FDF4;">✅ Validation</div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-step" style="background: #ECFDF5;">📊 Conformité</div>
+                    <span class="pipeline-arrow">→</span>
+                    <div class="pipeline-step" style="background: #EFF6FF;">💾 Stockage</div>
+                </div>
+                <div class="two-cols" style="margin-top: 1.5em;">
+                    <div class="card">
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--blue);">Données extraites</p>
+                        <ul style="font-size: 0.6em;">
+                            <li>Fournisseur (nom, matricule fiscal)</li>
+                            <li>Montants (HT, TVA, TTC)</li>
+                            <li>Date et numéro de facture</li>
+                            <li>Lignes détaillées</li>
+                            <li>Taux de retenue à la source</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--blue);">Formats supportés</p>
+                        <ul style="font-size: 0.6em;">
+                            <li>PDF (natif et scanné)</li>
+                            <li>Images (JPG, PNG)</li>
+                            <li>Factures multilingues (FR/AR)</li>
+                            <li>Formats tunisiens et internationaux</li>
+                        </ul>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Le pipeline d'extraction suit six étapes. Le document uploadé passe d'abord par l'OCR pour extraire le texte brut. Ensuite, le LLM structure les données en identifiant le fournisseur, les montants et les taux. Les données sont validées puis vérifiées pour la conformité fiscale avant d'être stockées en base.
+                </aside>
+            </section>
+
+            <!-- SLIDE 13: Triple Fallback -->
+            <section data-background-color="#F5F7FA" class="slide-white">
+                <span class="section-number">04</span>
+                <h2>Stratégie triple fallback</h2>
+                <p class="subtitle">Haute disponibilité de l'extraction IA</p>
+                <div class="diagram-container">
+                    <svg width="600" height="350" viewBox="0 0 600 350" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Level 1: Ollama -->
+                        <rect x="175" y="20" width="250" height="60" rx="10" fill="#0A2540"/>
+                        <text x="300" y="45" text-anchor="middle" fill="white" font-size="13" font-weight="700">🖥️ Niveau 1 : Ollama (Local)</text>
+                        <text x="300" y="65" text-anchor="middle" fill="#10B981" font-size="11">qwen2.5:7b — Latence ~2s</text>
+
+                        <!-- Arrow down with label -->
+                        <line x1="300" y1="80" x2="300" y2="120" stroke="#EF4444" stroke-width="2" marker-end="url(#arrowRed)"/>
+                        <text x="360" y="105" fill="#EF4444" font-size="10" font-style="italic">Si indisponible</text>
+
+                        <!-- Level 2: Groq -->
+                        <rect x="175" y="120" width="250" height="60" rx="10" fill="#2E75B6"/>
+                        <text x="300" y="145" text-anchor="middle" fill="white" font-size="13" font-weight="700">☁️ Niveau 2 : Groq (Cloud)</text>
+                        <text x="300" y="165" text-anchor="middle" fill="#BFDBFE" font-size="11">llama-3.3-70b — Latence ~4s</text>
+
+                        <!-- Arrow down with label -->
+                        <line x1="300" y1="180" x2="300" y2="220" stroke="#EF4444" stroke-width="2" marker-end="url(#arrowRed)"/>
+                        <text x="360" y="205" fill="#EF4444" font-size="10" font-style="italic">Si indisponible</text>
+
+                        <!-- Level 3: Template -->
+                        <rect x="175" y="220" width="250" height="60" rx="10" fill="#64748B"/>
+                        <text x="300" y="245" text-anchor="middle" fill="white" font-size="13" font-weight="700">📝 Niveau 3 : Template vide</text>
+                        <text x="300" y="265" text-anchor="middle" fill="#CBD5E1" font-size="11">Saisie manuelle assistée</text>
+
+                        <!-- Success path -->
+                        <rect x="470" y="20" width="110" height="60" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="2"/>
+                        <text x="525" y="48" text-anchor="middle" fill="#065F46" font-size="11" font-weight="600">✅ Succès</text>
+                        <text x="525" y="65" text-anchor="middle" fill="#065F46" font-size="10">→ Validation</text>
+                        <line x1="425" y1="50" x2="470" y2="50" stroke="#10B981" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+                        <rect x="470" y="120" width="110" height="60" rx="8" fill="#ECFDF5" stroke="#10B981" stroke-width="2"/>
+                        <text x="525" y="148" text-anchor="middle" fill="#065F46" font-size="11" font-weight="600">✅ Succès</text>
+                        <text x="525" y="165" text-anchor="middle" fill="#065F46" font-size="10">→ Validation</text>
+                        <line x1="425" y1="150" x2="470" y2="150" stroke="#10B981" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+                        <!-- Stats -->
+                        <rect x="140" y="300" width="320" height="35" rx="6" fill="#F0FDF4" stroke="#10B981"/>
+                        <text x="300" y="322" text-anchor="middle" fill="#065F46" font-size="12" font-weight="600">Disponibilité garantie : 99.9% — Aucune perte de service</text>
+
+                        <defs>
+                            <marker id="arrowRed" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                                <polygon points="0 0, 8 3, 0 6" fill="#EF4444"/>
+                            </marker>
+                            <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                                <polygon points="0 0, 8 3, 0 6" fill="#10B981"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+                <aside class="notes">
+                    Notre stratégie de triple fallback garantit la disponibilité du service d'extraction. Le premier niveau utilise Ollama en local avec le modèle qwen2.5:7b pour une latence minimale de 2 secondes. Si Ollama est indisponible, le système bascule automatiquement vers Groq en cloud avec llama-3.3-70b. En dernier recours, un template vide est fourni pour la saisie manuelle assistée, garantissant qu'aucune facture ne reste bloquée.
+                </aside>
+            </section>
+
+            <!-- SLIDE 14: Validation conformité -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">04</span>
+                <h2>Validation de conformité</h2>
+                <p class="subtitle">7 catégories de règles fiscales tunisiennes</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Catégorie</th>
+                            <th>Règles vérifiées</th>
+                            <th>Exemple</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Identité fiscale</strong></td>
+                            <td>Matricule fiscal, format, validité</td>
+                            <td>Format: 7 chiffres + clé</td>
+                        </tr>
+                        <tr>
+                            <td><strong>TVA</strong></td>
+                            <td>Taux (7%, 13%, 19%), calculs</td>
+                            <td>Cohérence HT × taux = TVA</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Retenue à la source</strong></td>
+                            <td>Taux applicables, seuils</td>
+                            <td>1.5%, 5%, 10%, 15%, 25%</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Timbre fiscal</strong></td>
+                            <td>Présence et montant (1 TND)</td>
+                            <td>Obligatoire si paiement espèces</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Format facture</strong></td>
+                            <td>Champs obligatoires, numérotation</td>
+                            <td>Numéro séquentiel unique</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Délais</strong></td>
+                            <td>Dates d'émission, échéance</td>
+                            <td>Max 30 jours pour déclaration</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cohérence montants</strong></td>
+                            <td>Totaux, sous-totaux, arrondis</td>
+                            <td>HT + TVA - Retenue = Net</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <aside class="notes">
+                    Le moteur de validation vérifie automatiquement 7 catégories de règles fiscales tunisiennes. De l'identité fiscale à la cohérence des montants, chaque facture est analysée en profondeur. Le système signale les anomalies avec un niveau de sévérité et propose des corrections, permettant aux comptables de se concentrer sur les cas réellement problématiques.
+                </aside>
+            </section>
+
+            <!-- SLIDE 15: Captures Sprint 2 -->
+            <section data-background-color="#F5F7FA" class="slide-white">
+                <span class="section-number">04</span>
+                <h2>Interface — Sprint 2</h2>
+                <p class="subtitle">Extraction et gestion des factures</p>
+                <div class="two-cols">
+                    <div class="card" style="text-align: center; padding: 1.5em;">
+                        <p style="font-size: 0.7em; font-weight: 600; margin-bottom: 0.8em;">Extraction IA en action</p>
+                        <div style="background: white; border: 1px solid var(--gray-mid); border-radius: 8px; padding: 1em; min-height: 180px; display: flex; align-items: center; justify-content: center;">
+                            <div style="text-align: left; width: 100%;">
+                                <div style="display: flex; gap: 0.5em; margin-bottom: 0.5em;">
+                                    <div style="flex: 1; background: #EFF6FF; border-radius: 4px; padding: 0.5em;">
+                                        <p style="font-size: 0.45em; color: #64748B;">Fournisseur</p>
+                                        <p style="font-size: 0.55em; font-weight: 600;">Société ABC SARL</p>
+                                    </div>
+                                    <div style="flex: 1; background: #ECFDF5; border-radius: 4px; padding: 0.5em;">
+                                        <p style="font-size: 0.45em; color: #64748B;">Matricule fiscal</p>
+                                        <p style="font-size: 0.55em; font-weight: 600;">1234567/A/M/000</p>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.5em;">
+                                    <div style="flex: 1; background: #FEF3C7; border-radius: 4px; padding: 0.5em;">
+                                        <p style="font-size: 0.45em; color: #64748B;">Montant TTC</p>
+                                        <p style="font-size: 0.55em; font-weight: 600;">2 380.000 TND</p>
+                                    </div>
+                                    <div style="flex: 1; background: #F0FDF4; border-radius: 4px; padding: 0.5em;">
+                                        <p style="font-size: 0.45em; color: #64748B;">Conformité</p>
+                                        <p style="font-size: 0.55em; font-weight: 600; color: var(--emerald);">✅ 7/7 règles</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <p style="font-size: 0.5em; color: #64748B; margin-top: 0.5em;">[ Remplacer par capture réelle ]</p>
+                    </div>
+                    <div class="card" style="text-align: center; padding: 1.5em;">
+                        <p style="font-size: 0.7em; font-weight: 600; margin-bottom: 0.8em;">Liste des factures</p>
+                        <div style="background: white; border: 1px solid var(--gray-mid); border-radius: 8px; padding: 0.8em; min-height: 180px;">
+                            <div style="background: var(--navy); border-radius: 4px; padding: 0.4em; margin-bottom: 0.4em;">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="font-size: 0.45em; color: white;">N°</span>
+                                    <span style="font-size: 0.45em; color: white;">Fournisseur</span>
+                                    <span style="font-size: 0.45em; color: white;">Montant</span>
+                                    <span style="font-size: 0.45em; color: white;">Statut</span>
+                                </div>
+                            </div>
+                            <div style="border-bottom: 1px solid #f0f0f0; padding: 0.3em 0;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.45em;">
+                                    <span>FAC-001</span><span>ABC SARL</span><span>2 380 TND</span><span style="color: var(--emerald);">✓</span>
+                                </div>
+                            </div>
+                            <div style="border-bottom: 1px solid #f0f0f0; padding: 0.3em 0;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.45em;">
+                                    <span>FAC-002</span><span>XYZ SA</span><span>5 100 TND</span><span style="color: var(--emerald);">✓</span>
+                                </div>
+                            </div>
+                            <div style="border-bottom: 1px solid #f0f0f0; padding: 0.3em 0;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.45em;">
+                                    <span>FAC-003</span><span>DEF & Co</span><span>890 TND</span><span style="color: #F59E0B;">⚠</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p style="font-size: 0.5em; color: #64748B; margin-top: 0.5em;">[ Remplacer par capture réelle ]</p>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Voici un aperçu de l'interface du sprint 2. À gauche, le résultat de l'extraction IA qui structure automatiquement les données du fournisseur, les montants et vérifie la conformité. À droite, la liste des factures avec leur statut de conformité. Ces maquettes seront remplacées par les captures d'écran réelles de l'application.
+                </aside>
+            </section>
+
+            <!-- SLIDE 16: Performance -->
+            <section data-background-color="#0A2540" class="slide-navy">
+                <span class="section-number" style="color: rgba(16,185,129,0.2);">04</span>
+                <h2>Indicateurs de performance</h2>
+                <p class="subtitle" style="color: #10B981 !important;">Résultats mesurés du pipeline IA</p>
+                <div class="kpi-grid" style="margin-top: 1.5em;">
+                    <div class="kpi-box" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15);">
+                        <span class="number" style="color: #10B981;">92%</span>
+                        <span class="label" style="color: rgba(255,255,255,0.7);">Précision d'extraction</span>
+                    </div>
+                    <div class="kpi-box" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15);">
+                        <span class="number" style="color: #10B981;">~2s</span>
+                        <span class="label" style="color: rgba(255,255,255,0.7);">Latence Ollama (local)</span>
+                    </div>
+                    <div class="kpi-box" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15);">
+                        <span class="number" style="color: #10B981;">~4s</span>
+                        <span class="label" style="color: rgba(255,255,255,0.7);">Latence Groq (cloud)</span>
+                    </div>
+                    <div class="kpi-box" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15);">
+                        <span class="number" style="color: #10B981;">99.9%</span>
+                        <span class="label" style="color: rgba(255,255,255,0.7);">Disponibilité service</span>
+                    </div>
+                </div>
+                <div style="margin-top: 2em;">
+                    <div class="card-dark" style="display: inline-block; padding: 0.8em 1.5em;">
+                        <p style="font-size: 0.7em;">📈 Gain de productivité estimé : <strong style="color: #10B981;">réduction de 80% du temps de saisie manuelle</strong></p>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Les indicateurs de performance valident notre approche. Le pipeline atteint 92% de précision sur l'extraction des données de factures tunisiennes. La latence est de 2 secondes en local avec Ollama et 4 secondes via Groq en cloud. Grâce au triple fallback, la disponibilité du service est de 99.9%. Le gain pour l'utilisateur est une réduction de 80% du temps de saisie.
+                </aside>
+            </section>
+
+            <!-- ============================================ -->
+            <!-- SECTION 5: SPRINT 3 -->
+            <!-- ============================================ -->
+
+            <!-- SLIDE 17: TEJ -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">05</span>
+                <h2>Certificats TEJ</h2>
+                <p class="subtitle">Génération XML conforme au schéma XSD 2026.1.0</p>
+                <div class="two-cols">
+                    <div>
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--navy); margin-bottom: 0.5em;">Architecture (Pattern Builder)</p>
+                        <ul style="font-size: 0.63em;">
+                            <li>Collecte des données de retenue</li>
+                            <li>Validation des champs obligatoires</li>
+                            <li>Construction XML progressive</li>
+                            <li>Validation contre le schéma XSD</li>
+                            <li>Signature et horodatage</li>
+                            <li>Export XML prêt pour dépôt</li>
+                        </ul>
+                        <div style="margin-top: 1em;">
+                            <span class="badge badge-green">XSD 2026.1.0</span>
+                            <span class="badge badge-blue">Pattern Builder</span>
+                            <span class="badge badge-navy">Validation stricte</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="card" style="background: #1E293B; padding: 1em; border-radius: 8px;">
+                            <pre style="font-size: 0.45em; color: #10B981; margin: 0; text-align: left; overflow: hidden; line-height: 1.6;"><code>&lt;DeclarationRetenue&gt;
+  &lt;Declarant&gt;
+    &lt;MatriculeFiscal&gt;1234567/A&lt;/MatriculeFiscal&gt;
+    &lt;RaisonSociale&gt;Société XYZ&lt;/RaisonSociale&gt;
+  &lt;/Declarant&gt;
+  &lt;Beneficiaire&gt;
+    &lt;MatriculeFiscal&gt;7654321/B&lt;/MatriculeFiscal&gt;
+    &lt;MontantBrut&gt;10000.000&lt;/MontantBrut&gt;
+    &lt;TauxRetenue&gt;15&lt;/TauxRetenue&gt;
+    &lt;MontantRetenue&gt;1500.000&lt;/MontantRetenue&gt;
+  &lt;/Beneficiaire&gt;
+  &lt;Periode&gt;2026-Q1&lt;/Periode&gt;
+&lt;/DeclarationRetenue&gt;</code></pre>
+                        </div>
+                    </div>
+                </div>
+                <aside class="notes">
+                    La génération des certificats TEJ utilise le design pattern Builder pour construire progressivement le XML conforme au schéma XSD 2026.1.0 de l'administration fiscale tunisienne. Chaque certificat est validé contre le schéma avant export, garantissant son acceptation lors du dépôt électronique. Les données de retenue à la source sont automatiquement calculées à partir des factures validées.
+                </aside>
+            </section>
+
+            <!-- SLIDE 18: Conseiller IA -->
+            <section data-background-color="#F5F7FA" class="slide-white">
+                <span class="section-number">05</span>
+                <h2>Conseiller financier IA</h2>
+                <p class="subtitle">Assistant conversationnel contextuel</p>
+                <div class="two-cols">
+                    <div>
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--navy); margin-bottom: 0.5em;">Capacités</p>
+                        <ul style="font-size: 0.63em;">
+                            <li>Analyse des dépenses par période</li>
+                            <li>Conseils d'optimisation fiscale</li>
+                            <li>Réponses aux questions comptables</li>
+                            <li>Alertes sur les anomalies détectées</li>
+                            <li>Suggestions de catégorisation</li>
+                            <li>Prévisions de trésorerie</li>
+                        </ul>
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--navy); margin-top: 1em; margin-bottom: 0.5em;">Technologies</p>
+                        <ul style="font-size: 0.63em;">
+                            <li>LLM avec contexte des données utilisateur</li>
+                            <li>RAG sur l'historique des factures</li>
+                            <li>Réponses en temps réel (streaming)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="card" style="background: white; border: 2px solid var(--blue);">
+                            <div style="background: var(--navy); margin: -1.2em -1.2em 0.8em -1.2em; padding: 0.6em 1em; border-radius: 10px 10px 0 0;">
+                                <p style="font-size: 0.6em; color: white; font-weight: 600;">💬 Conseiller SmartInvoice</p>
+                            </div>
+                            <div style="background: var(--gray-light); border-radius: 8px; padding: 0.6em; margin-bottom: 0.5em;">
+                                <p style="font-size: 0.5em; color: var(--navy);">Quel est le montant total de retenue à la source pour ce trimestre ?</p>
+                            </div>
+                            <div style="background: #ECFDF5; border-radius: 8px; padding: 0.6em; margin-left: 1em;">
+                                <p style="font-size: 0.5em; color: #065F46;">Le montant total des retenues pour Q1 2026 est de <strong>15 420.000 TND</strong>, réparti sur 23 factures. Je note une hausse de 12% par rapport au trimestre précédent.</p>
+                            </div>
+                            <div style="background: var(--gray-light); border-radius: 8px; padding: 0.6em; margin-top: 0.5em;">
+                                <p style="font-size: 0.5em; color: var(--navy);">Des recommandations pour optimiser ?</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Le conseiller financier IA offre une interface conversationnelle permettant aux utilisateurs de poser des questions sur leurs données financières. Alimenté par un LLM avec accès au contexte des factures de l'organisation, il peut analyser les tendances, proposer des optimisations fiscales et alerter sur les anomalies. L'approche RAG garantit des réponses pertinentes et contextuelles.
+                </aside>
+            </section>
+
+            <!-- SLIDE 19: Tableau de bord -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <span class="section-number">05</span>
+                <h2>Tableau de bord</h2>
+                <p class="subtitle">Vue d'ensemble en temps réel</p>
+                <div style="background: var(--gray-light); border-radius: 12px; padding: 1.5em; border: 1px solid var(--gray-mid);">
+                    <div class="kpi-grid" style="margin-bottom: 1em;">
+                        <div class="kpi-box" style="background: white;">
+                            <span class="number" style="font-size: 1.5em;">📄 147</span>
+                            <span class="label">Factures ce mois</span>
+                        </div>
+                        <div class="kpi-box" style="background: white;">
+                            <span class="number" style="font-size: 1.5em;">💰 89.4K</span>
+                            <span class="label">Volume TND</span>
+                        </div>
+                        <div class="kpi-box" style="background: white;">
+                            <span class="number" style="font-size: 1.5em; color: var(--emerald);">✅ 94%</span>
+                            <span class="label">Taux conformité</span>
+                        </div>
+                        <div class="kpi-box" style="background: white;">
+                            <span class="number" style="font-size: 1.5em; color: #F59E0B;">⚠️ 3</span>
+                            <span class="label">Alertes actives</span>
+                        </div>
+                    </div>
+                    <div class="two-cols" style="gap: 1em;">
+                        <div style="background: white; border-radius: 8px; padding: 1em; border: 1px solid var(--gray-mid);">
+                            <p style="font-size: 0.6em; font-weight: 600; color: var(--navy);">Évolution mensuelle</p>
+                            <svg width="100%" height="80" viewBox="0 0 300 80">
+                                <polyline points="10,60 50,45 90,50 130,35 170,40 210,25 250,20 290,15" fill="none" stroke="#2E75B6" stroke-width="2.5"/>
+                                <polyline points="10,65 50,60 90,55 130,50 170,45 210,40 250,35 290,30" fill="none" stroke="#10B981" stroke-width="2" stroke-dasharray="4"/>
+                            </svg>
+                            <div style="display: flex; gap: 1em; justify-content: center;">
+                                <span style="font-size: 0.45em; color: var(--blue);">— Factures</span>
+                                <span style="font-size: 0.45em; color: var(--emerald);">- - Conformes</span>
+                            </div>
+                        </div>
+                        <div style="background: white; border-radius: 8px; padding: 1em; border: 1px solid var(--gray-mid);">
+                            <p style="font-size: 0.6em; font-weight: 600; color: var(--navy);">Répartition par statut</p>
+                            <svg width="100%" height="80" viewBox="0 0 300 80">
+                                <rect x="20" y="10" width="180" height="20" rx="4" fill="#10B981"/>
+                                <rect x="200" y="10" width="30" height="20" rx="4" fill="#F59E0B"/>
+                                <rect x="230" y="10" width="15" height="20" rx="4" fill="#EF4444"/>
+                                <text x="110" y="24" text-anchor="middle" fill="white" font-size="9">Conformes (78%)</text>
+                                <rect x="20" y="45" width="120" height="20" rx="4" fill="#2E75B6"/>
+                                <rect x="140" y="45" width="80" height="20" rx="4" fill="#93C5FD"/>
+                                <rect x="220" y="45" width="25" height="20" rx="4" fill="#BFDBFE"/>
+                                <text x="80" y="59" text-anchor="middle" fill="white" font-size="9">Payées (50%)</text>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                <p style="font-size: 0.55em; color: #64748B; text-align: center; margin-top: 0.5em;">[ Remplacer par capture d'écran réelle du dashboard ]</p>
+                <aside class="notes">
+                    Le tableau de bord offre une vue synthétique de l'activité. L'utilisateur voit immédiatement le nombre de factures traitées, le volume financier, le taux de conformité et les alertes actives. Des graphiques interactifs montrent l'évolution mensuelle et la répartition par statut, permettant un pilotage efficace de la gestion financière.
+                </aside>
+            </section>
+
+            <!-- SLIDE 20: Autres fonctionnalités -->
+            <section data-background-color="#0A2540" class="slide-navy">
+                <span class="section-number" style="color: rgba(16,185,129,0.2);">05</span>
+                <h2>Fonctionnalités complémentaires</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em; margin-top: 1.5em;">
+                    <div class="card-dark">
+                        <p style="font-size: 1.2em; margin-bottom: 0.3em;">🔔</p>
+                        <p style="font-size: 0.7em; font-weight: 600;">Notifications temps réel</p>
+                        <ul style="font-size: 0.55em; opacity: 0.8;">
+                            <li>WebSocket pour les alertes live</li>
+                            <li>Email pour les échéances</li>
+                            <li>Notifications in-app</li>
+                        </ul>
+                    </div>
+                    <div class="card-dark">
+                        <p style="font-size: 1.2em; margin-bottom: 0.3em;">💳</p>
+                        <p style="font-size: 0.7em; font-weight: 600;">Paiement Stripe</p>
+                        <ul style="font-size: 0.55em; opacity: 0.8;">
+                            <li>Plans d'abonnement SaaS</li>
+                            <li>Facturation récurrente</li>
+                            <li>Gestion des limites par plan</li>
+                        </ul>
+                    </div>
+                    <div class="card-dark">
+                        <p style="font-size: 1.2em; margin-bottom: 0.3em;">🌍</p>
+                        <p style="font-size: 0.7em; font-weight: 600;">Internationalisation (i18n)</p>
+                        <ul style="font-size: 0.55em; opacity: 0.8;">
+                            <li>Français, Arabe (RTL), Anglais</li>
+                            <li>Changement dynamique de langue</li>
+                            <li>Formats de dates et nombres localisés</li>
+                        </ul>
+                    </div>
+                    <div class="card-dark">
+                        <p style="font-size: 1.2em; margin-bottom: 0.3em;">📊</p>
+                        <p style="font-size: 0.7em; font-weight: 600;">Exports & Rapports</p>
+                        <ul style="font-size: 0.55em; opacity: 0.8;">
+                            <li>Export PDF et Excel</li>
+                            <li>Rapports périodiques automatiques</li>
+                            <li>Historique d'audit complet</li>
+                        </ul>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Le sprint 3 inclut également des fonctionnalités complémentaires essentielles. Les notifications en temps réel par WebSocket alertent les utilisateurs. L'intégration Stripe permet la monétisation SaaS avec des plans d'abonnement. Le support trilingue avec RTL pour l'arabe couvre le marché tunisien. Enfin, les exports PDF et Excel facilitent le travail quotidien des comptables.
+                </aside>
+            </section>
+
+            <!-- ============================================ -->
+            <!-- CONCLUSION -->
+            <!-- ============================================ -->
+
+            <!-- SLIDE 21: Bilan chiffré -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <h2>Bilan du projet</h2>
+                <p class="subtitle">En chiffres</p>
+                <div class="kpi-grid" style="margin-bottom: 1.5em;">
+                    <div class="kpi-box">
+                        <span class="number">29 400</span>
+                        <span class="label">Lignes de code</span>
+                    </div>
+                    <div class="kpi-box">
+                        <span class="number">70+</span>
+                        <span class="label">Endpoints REST</span>
+                    </div>
+                    <div class="kpi-box">
+                        <span class="number">62+</span>
+                        <span class="label">Composants React</span>
+                    </div>
+                    <div class="kpi-box">
+                        <span class="number">18</span>
+                        <span class="label">Modules services</span>
+                    </div>
+                </div>
+                <div class="kpi-grid">
+                    <div class="kpi-box">
+                        <span class="number" style="color: var(--emerald);">92%</span>
+                        <span class="label">Précision IA</span>
+                    </div>
+                    <div class="kpi-box">
+                        <span class="number" style="color: var(--emerald);">151</span>
+                        <span class="label">Story Points livrés</span>
+                    </div>
+                    <div class="kpi-box">
+                        <span class="number" style="color: var(--emerald);">8</span>
+                        <span class="label">Collections MongoDB</span>
+                    </div>
+                    <div class="kpi-box">
+                        <span class="number" style="color: var(--emerald);">3</span>
+                        <span class="label">Langues supportées</span>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Voici le bilan quantitatif du projet. Avec près de 29 400 lignes de code, 70 endpoints et 62 composants React, SmartInvoice AI est une plateforme complète et robuste. Le taux de précision de 92% valide notre approche IA. Les 151 story points livrés en trois sprints témoignent d'une productivité soutenue tout au long du projet.
+                </aside>
+            </section>
+
+            <!-- SLIDE 22: Compétences acquises -->
+            <section data-background-color="#F5F7FA" class="slide-white">
+                <h2>Compétences acquises</h2>
+                <div class="three-cols" style="margin-top: 1.5em;">
+                    <div class="card" style="text-align: center;">
+                        <p style="font-size: 1.5em; margin-bottom: 0.3em;">⚙️</p>
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--navy);">Développement Full-Stack</p>
+                        <ul style="font-size: 0.55em; text-align: left;">
+                            <li>Next.js / React avancé</li>
+                            <li>API REST avec Flask</li>
+                            <li>MongoDB / Redis</li>
+                            <li>TypeScript strict</li>
+                        </ul>
+                    </div>
+                    <div class="card" style="text-align: center;">
+                        <p style="font-size: 1.5em; margin-bottom: 0.3em;">🤖</p>
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--navy);">Intelligence Artificielle</p>
+                        <ul style="font-size: 0.55em; text-align: left;">
+                            <li>Intégration de LLMs</li>
+                            <li>Prompt engineering</li>
+                            <li>Pipeline OCR + NLP</li>
+                            <li>Stratégies de fallback</li>
+                        </ul>
+                    </div>
+                    <div class="card" style="text-align: center;">
+                        <p style="font-size: 1.5em; margin-bottom: 0.3em;">🏗️</p>
+                        <p style="font-size: 0.7em; font-weight: 600; color: var(--navy);">Architecture & DevOps</p>
+                        <ul style="font-size: 0.55em; text-align: left;">
+                            <li>Architecture multi-tenant</li>
+                            <li>Docker / CI/CD</li>
+                            <li>Sécurité (JWT, RBAC)</li>
+                            <li>Déploiement cloud</li>
+                        </ul>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5em; text-align: center;">
+                    <div class="card" style="display: inline-block; padding: 0.6em 1.5em;">
+                        <p style="font-size: 0.65em;"><strong>Compétence transversale :</strong> Conformité réglementaire et fiscalité tunisienne appliquée à l'informatique</p>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Ce projet m'a permis d'acquérir des compétences solides dans trois domaines majeurs. En développement full-stack, j'ai maîtrisé les technologies modernes React et Flask. En intelligence artificielle, j'ai appris à intégrer et orchestrer des LLMs avec des stratégies de résilience. En architecture, j'ai conçu un système multi-tenant sécurisé déployé en conteneurs. La compétence transversale la plus distinctive est la maîtrise de la conformité fiscale tunisienne appliquée au logiciel.
+                </aside>
+            </section>
+
+            <!-- SLIDE 23: Perspectives -->
+            <section data-background-color="#FFFFFF" class="slide-white">
+                <h2>Perspectives</h2>
+                <p class="subtitle">Évolutions futures de SmartInvoice AI</p>
+                <div class="three-cols" style="margin-top: 1em;">
+                    <div class="card" style="border-top: 4px solid var(--blue);">
+                        <p style="font-size: 0.65em; font-weight: 700; color: var(--blue); margin-bottom: 0.5em;">Court terme (3 mois)</p>
+                        <ul style="font-size: 0.55em;">
+                            <li>Application mobile (React Native)</li>
+                            <li>Intégration El Fatoora officielle</li>
+                            <li>OCR amélioré pour documents arabes</li>
+                            <li>Tests de charge et optimisation</li>
+                        </ul>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--emerald);">
+                        <p style="font-size: 0.65em; font-weight: 700; color: var(--emerald); margin-bottom: 0.5em;">Moyen terme (6-12 mois)</p>
+                        <ul style="font-size: 0.55em;">
+                            <li>Module comptabilité complète</li>
+                            <li>Intégration bancaire (Open Banking)</li>
+                            <li>IA prédictive (trésorerie)</li>
+                            <li>Marketplace d'extensions</li>
+                        </ul>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--navy);">
+                        <p style="font-size: 0.65em; font-weight: 700; color: var(--navy); margin-bottom: 0.5em;">Long terme (12+ mois)</p>
+                        <ul style="font-size: 0.55em;">
+                            <li>Expansion Maghreb (MA, DZ, LY)</li>
+                            <li>Certification éditeur agréé</li>
+                            <li>IA générative pour rapports</li>
+                            <li>Blockchain pour audit trail</li>
+                        </ul>
+                    </div>
+                </div>
+                <aside class="notes">
+                    Les perspectives d'évolution sont structurées en trois horizons. À court terme, l'intégration officielle avec El Fatoora et le développement mobile. À moyen terme, l'expansion fonctionnelle avec la comptabilité complète et l'Open Banking. À long terme, l'expansion géographique vers le Maghreb et l'adoption de technologies émergentes comme la blockchain pour la traçabilité.
+                </aside>
+            </section>
+
+            <!-- SLIDE 24: Merci -->
+            <section data-background-color="#0A2540" class="slide-navy">
+                <div style="margin-top: 2em;">
+                    <h1 style="font-size: 2.5em; margin-bottom: 0.3em;">Merci pour votre attention</h1>
+                    <p style="font-size: 1.2em; color: #10B981 !important; margin-bottom: 2em;">Questions ?</p>
+                    <div style="margin-top: 2em;">
+                        <div class="card-dark" style="display: inline-block; padding: 1em 2em; text-align: left;">
+                            <p style="font-size: 0.7em; margin-bottom: 0.5em;">📧 <strong>Contact :</strong> anas.badri@email.com</p>
+                            <p style="font-size: 0.7em; margin-bottom: 0.5em;">🔗 <strong>GitHub :</strong> github.com/myanasbadri/PFE_SAAS</p>
+                            <p style="font-size: 0.7em;">🌐 <strong>Démo :</strong> smartinvoice-ai.railway.app</p>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.6em; opacity: 0.5; margin-top: 2em;">SmartInvoice AI — Projet de Fin d'Études 2025-2026</p>
+                </div>
+                <aside class="notes">
+                    Je vous remercie pour votre attention et votre écoute. Je suis maintenant disponible pour répondre à vos questions concernant le projet, l'architecture technique, les choix d'implémentation ou les perspectives d'évolution. N'hésitez pas.
+                </aside>
+            </section>
+
+        </div><!-- /.slides -->
+    </div><!-- /.reveal -->
+
+    <!-- reveal.js 4.6.1 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.js"></script>
+
+    <script>
+        Reveal.initialize({
+            // Présentation
+            hash: true,
+            history: true,
+            center: true,
+
+            // Transitions
+            transition: 'slide',
+            transitionSpeed: 'default',
+            backgroundTransition: 'fade',
+
+            // Affichage
+            slideNumber: 'c/t',
+            showSlideNumber: 'all',
+            progress: true,
+
+            // Dimensions
+            width: 1280,
+            height: 720,
+            margin: 0.08,
+
+            // Contrôles
+            controls: true,
+            controlsLayout: 'bottom-right',
+
+            // Notes du présentateur
+            showNotes: false,
+
+            // PDF
+            pdfSeparateFragments: false,
+            pdfMaxPagesPerSlide: 1
+        });
+    </script>
+</body>
+</html>

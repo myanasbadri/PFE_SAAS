@@ -1,0 +1,133 @@
+@startuml Diagramme_Sequence_Edition_Facture
+title Diagramme de séquence — Édition d'une facture
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "@token_required\n@org_required" as auth #FFF9C4
+  database "MongoDB" as db #F3E5F5
+  participant "Notification\nService" as notif #FFEBEE
+end box
+
+== Phase 1 : Ouverture du formulaire d'édition ==
+
+user -> front : Cliquer sur « Modifier »\ndepuis la liste des factures
+activate front
+
+note right of front
+  **Composant : InvoiceManagement**
+  ──────────────────────────────────
+  • Dialogue modal d'édition
+  • Champs pré-remplis avec
+    les données actuelles
+  • Sélecteurs pour statut et tags
+end note
+
+front -> front : Ouvrir le dialogue d'édition\n(pré-remplir les champs existants)
+front --> user : Afficher le formulaire\navec les données actuelles
+
+== Phase 2 : Soumission des modifications ==
+
+user -> front : Modifier les champs\n(données, tags, statut)\net valider
+
+front -> front : Valider les champs\ncôté client
+
+front -> api : **PUT /api/invoices/{id}**\nHeaders : Authorization: Bearer <JWT>\n              X-Org-Id: <org_id>\nBody : { data?, tags?, status? }
+activate api
+
+api -> auth : Vérifier le token JWT\net l'appartenance à l'organisation
+activate auth
+
+alt Token invalide ou expiré
+  auth --> front : **401 Unauthorized**
+  front --> user : Rediriger vers Login
+else Token valide
+
+  auth -> auth : Décoder le token\nVérifier is_active\nExtraire user_id
+  auth --> api : Utilisateur authentifié\net membre de l'organisation
+  deactivate auth
+
+  == Phase 3 : Validation et mise à jour ==
+
+  api -> db : Rechercher la facture\npar _id (ObjectId)
+  activate db
+  db --> api : Document facture
+  deactivate db
+
+  alt Facture non trouvée
+    api --> front : **404 Not Found**\n{ error: "Invoice not found" }
+    front --> user : Afficher message d'erreur
+  else Facture trouvée
+
+    api -> api : Vérifier que\nfacture.org_id == org_id courant
+
+    alt Accès refusé (org_id différent)
+      api --> front : **403 Forbidden**\n{ error: "Access denied" }
+      front --> user : Afficher erreur d'accès
+    else Accès autorisé
+
+      api -> api : Valider les champs fournis
+
+      note right of api
+        Champs modifiables :
+        ─────────────────
+        • **data** : vendor_name, invoice_no,
+          date, due_date, bill_to,
+          line_items, totals
+        • **tags** : tableau de libellés
+        • **status** : completed, reviewed,
+          paid, unpaid, pending, failed
+      end note
+
+      alt Aucun champ valide fourni
+        api --> front : **400 Bad Request**\n{ error: "No valid fields" }
+        front --> user : Afficher erreur de validation
+      else Champs valides
+
+        api -> db : **invoices.update_one(**\n  { _id: ObjectId(id) },\n  { $set: { data, tags, status,\n    updated_at: now() } }\n**)**
+        activate db
+        db --> api : Mise à jour confirmée
+        deactivate db
+
+        == Phase 4 : Audit et notification ==
+
+        api -> db : **activity.insert_one(**\n  { action: "update_invoice",\n    user_id, org_id,\n    details: { invoice_id },\n    timestamp, ip_address }\n**)**
+        activate db
+        db --> api : OK
+        deactivate db
+
+        api -> notif : Émettre notification
+        activate notif
+        note right of notif
+          Si **statut** modifié :
+            notify_status_changed()
+          Sinon :
+            notify_invoice_updated()
+        end note
+        notif --> api : OK
+        deactivate notif
+
+        api --> front : **200 OK**\n{ success: true,\n  message: "Invoice updated" }
+        deactivate api
+
+        front -> front : Fermer le dialogue\nRafraîchir la liste\ndes factures
+        front --> user : Afficher confirmation\n(toast « Facture mise à jour »)
+
+      end
+    end
+  end
+end
+
+deactivate front
+
+@enduml

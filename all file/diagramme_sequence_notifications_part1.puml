@@ -1,0 +1,125 @@
+@startuml Diagramme_Sequence_Notifications_Part1
+title Diagramme de séquence — Notifications (1/2) : Émission et consultation
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor #3366CC
+skinparam sequenceLifeLineBorderColor #999999
+skinparam titleFontSize 18
+skinparam noteFontSize 11
+skinparam BoxPadding 10
+
+box "Côté Client" #E3F2FD
+  actor Utilisateur as user
+  participant "Interface\n(Next.js / React)" as front #E8F0FE
+end box
+
+box "Côté Serveur" #E8F5E9
+  participant "API REST\n(Flask)" as api #C8E6C9
+  participant "Notification\nService" as ns #FFE0B2
+  database "MongoDB" as db #F3E5F5
+  participant "Email\n(Gmail SMTP)" as email #FFEBEE
+end box
+
+== Partie 1 : Émission d'une notification (déclencheur interne) ==
+
+note over api
+  Déclencheur : une action backend
+  (extraction terminée, facture mise
+  à jour, statut modifié, etc.)
+end note
+
+api -> ns : **notify_extraction_completed(**\n  user_id, invoice_id,\n  filename, confidence\n**)**
+activate ns
+
+ns -> db : Récupérer les préférences\nnotification_preferences\n.find_one({ user_id })
+activate db
+db --> ns : Préférences utilisateur
+deactivate db
+
+note right of ns
+  Préférences vérifiées :
+  ────────────────────
+  • Canaux activés :\n    in_app, email, sms
+  • Catégorie activée ?\n    (extraction, invoice, etc.)
+  • Heures silencieuses ?\n    (début, fin, fuseau)
+end note
+
+ns -> ns : Vérifier si la catégorie\n"extraction" est activée
+
+alt Catégorie désactivée
+  ns --> api : Notification ignorée
+else Catégorie activée
+
+  ns -> ns : Rendre le template\n(substitution des variables)
+
+  ns -> db : **notifications.insert_one(**\n  { user_id, title, content,\n    category: "extraction",\n    is_read: false,\n    priority: "normal",\n    metadata: { confidence,\n      filename },\n    delivery_status:\n      { in_app: true },\n    created_at }\n**)**
+  activate db
+  db --> ns : notification_id
+  deactivate db
+
+  alt Canal email activé ET hors heures silencieuses
+    ns -> db : Récupérer l'email\nde l'utilisateur
+    activate db
+    db --> ns : user.email
+    deactivate db
+
+    ns -> ns : Construire le template HTML\navec les variables\n({ filename, confidence })
+
+    ns -> email : Envoyer l'email\nvia Gmail SMTP
+    activate email
+    email --> ns : Envoi confirmé
+    deactivate email
+
+    ns -> db : Mettre à jour\ndelivery_status.email = true
+    activate db
+    db --> ns : OK
+    deactivate db
+  end
+
+  ns --> api : Notification créée\n(notification_id)
+  deactivate ns
+
+end
+
+== Partie 2 : Consultation des notifications ==
+
+user -> front : Ouvrir le panneau\nde notifications
+activate front
+
+note right of front
+  **Composant : NotificationSystem**
+  ──────────────────────────────────
+  • Panneau latéral de notifications
+  • Badge avec compteur non lues
+  • Liste déroulante avec pagination
+  • Filtrage par catégorie
+end note
+
+front -> api : **GET /api/notifications/user**\n?page=1&limit=20\nHeaders : Authorization
+activate api
+
+api -> api : @token_required
+
+api -> ns : get_notifications(\n  user_id, page, limit)
+activate ns
+
+ns -> db : **notifications.find(**\n  { user_id }\n**).sort(created_at, -1)**\n.skip(offset).limit(20)
+activate db
+db --> ns : Liste des notifications
+deactivate db
+
+ns -> db : **notifications.count_documents(**\n  { user_id, is_read: false }\n**)**
+activate db
+db --> ns : unread_count
+deactivate db
+
+ns --> api : { notifications[], total,\n  page, pages, unread_count }
+deactivate ns
+
+api --> front : **200 OK**\n{ notifications[], unread_count }
+deactivate api
+
+front --> user : Afficher la liste\ndes notifications\navec badge non lues
+
+deactivate front
+
+@enduml
